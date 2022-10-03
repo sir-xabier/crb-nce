@@ -6,13 +6,13 @@ import warnings
 warnings.filterwarnings("ignore")
 from sklearn.metrics import mean_absolute_error,accuracy_score,median_absolute_error
 #Data
-ROOT= os.getcwd()
+ROOT= os.path.abspath(os.path.join(os.getcwd(), os.pardir))
 
-df_s= pd.read_csv(ROOT+"/data/test/shilhouette_3.csv",header=0,index_col=0).drop(columns="0")
-df_ch= pd.read_csv(ROOT+"/data/test/calinski_harabasz_3.csv",header=0,index_col=0).drop(columns="0")
-df_db= pd.read_csv(ROOT+"/data/test/davies_boulding_3.csv",header=0,index_col=0).drop(columns="0")
-df_gci= pd.read_csv(ROOT+"/data/test/gci_3.csv",header=0,index_col=0).drop(columns="0")
-df_y= pd.read_csv(ROOT+"/data/test/y_3.csv",header=0,index_col=0)
+df_s= pd.read_csv(ROOT+"/data/test/shilhouette_.csv",header=0,index_col=0).drop(columns="0")
+df_ch= pd.read_csv(ROOT+"/data/test/calinski_harabasz_.csv",header=0,index_col=0).drop(columns="0")
+df_db= pd.read_csv(ROOT+"/data/test/davies_boulding_.csv",header=0,index_col=0).drop(columns="0")
+df_gci= pd.read_csv(ROOT+"/data/test/gci_.csv",header=0,index_col=0).drop(columns="0")
+df_y= pd.read_csv(ROOT+"/data/test/y_.csv",header=0,index_col=0)
 
 c_complejo=np.load(ROOT+"/data/genetic/best_solution_Criterio_complejo_P100_G1000_W30_M0.1_T5_S31417.npy",allow_pickle=True)
 c_ajustado=np.load(ROOT+"/data/genetic/best_solution_Criterio_ajustado_P100_G1000_W30_M0.1_T5_S31417.npy",allow_pickle=True)

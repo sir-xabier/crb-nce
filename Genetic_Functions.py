@@ -8,20 +8,6 @@ from deap import creator
 from deap import tools
 import random
 
-root_path=os.getcwd()
-gci= np.load(root_path+"/data/train/global_gci_blobs.npy",allow_pickle=True)
-s_c= np.load(root_path+"/data/train/global_sin_cubrir_blobs.npy",allow_pickle=True)
-d= np.load(root_path+"/data/train/global_diff_blobs.npy",allow_pickle=True)
-d2= np.load(root_path+"/data/train/global_diff2_blobs.npy",allow_pickle=True)
-p_e= np.load(root_path+"/data/train/global_prop_expl_blobs.npy",allow_pickle=True)
-
-gci_val= np.load(root_path+"/data/train/global_gci_blobs_val.npy",allow_pickle=True)
-s_c_val= np.load(root_path+"/data/train/global_sin_cubrir_blobs_val.npy",allow_pickle=True)
-d_val= np.load(root_path+"/data/train/global_diff_blobs_val.npy",allow_pickle=True)
-d2_val= np.load(root_path+"/data/train/global_diff2_blobs_val.npy",allow_pickle=True)
-p_e_val= np.load(root_path+"/data/train/global_prop_expl_blobs_val.npy",allow_pickle=True)
-
-
 def evalMAE_1(individual,val_mode=False):
     global gci
     global d

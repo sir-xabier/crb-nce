@@ -4,9 +4,7 @@ import datetime
 import time
 import numpy as np
 from scipy.optimize import NonlinearConstraint, Bounds, differential_evolution
-
-sys.path.append(os.getcwd())
-
+from tqdm import tqdm
 def diferential_evolution(N,orness):
     
     # Función objetivo del problema de optimización
@@ -82,23 +80,21 @@ def experiment_diferential_evolution(args):
     N=args.N
     orness=args.orness
     method=args.method
-    weight_folder = os.getcwd()+"/data/weights"
+    ROOT= os.path.abspath(os.path.join(os.getcwd(), os.pardir))
+
+    weight_folder = ROOT+"/data/weights/"
     if not os.path.exists(weight_folder):
         os.makedirs(weight_folder)
         
-    for i in N:
-        sample_folder = os.path.join(weight_folder, str(i))
-        if not os.path.exists(sample_folder):
-            os.makedirs(sample_folder)
-    
+    for i in tqdm(range(0,len(N))):    
         for j in orness:
-            file_path=sample_folder+"/"+ "W_"+ str(i) + '_' + str(j)
+            file_path=weight_folder+ "W_"+ str(N[i]) + '_' + str(j)
             time_on= time.time()
             if not os.path.exists(file_path):
-                w_optim=diferential_evolution(i,j)
+                w_optim=diferential_evolution(N[i],j)
                 np.save(file=file_path,arr=w_optim)
             time_diff= time.time()- time_on    
-            print("Experiment " + "W_"+ str(i) + '_' + str(j)+ "has finished in: " + str(time_diff)+ " seconds")     
+            print("Experiment " + "W_"+ str(N[i]) + '_' + str(j)+ "has finished in: " + str(time_diff)+ " seconds")     
 
 # Python program to use
 # main for function call.
@@ -109,16 +105,16 @@ if __name__ == "__main__":
     #Config
     args = Namespace(
     # Training hyperparameters
-    N=[500,1250,10000],
+    N=[500,1250,10000,150,178,277,17976,214,336,106,297,625,208],
     seed=31416,
 
     method="differential_evolution",
 
-    orness=[0.15,0.20,.25,0.3,0.35,0.4,0.45],
+    orness=[0.1,0.15,0.20,.25,0.3,0.35,0.4,0.45],
     N_particles=12,
     G=20,
     iter_max=300
     )
-       
+ 
     if args.method=="differential_evolution":
         experiment_diferential_evolution(args)

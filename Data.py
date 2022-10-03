@@ -56,10 +56,10 @@ def generate_blobs(n_blobs=10,k_low=1,k_high=10,dim=2,n_samples=500,initial_seed
         return names,data
 
 
-def generate_test_data(n_samples=500,random_state=131416,path="./data/test_data.json"):
+def generate_test_data(root,n_samples=500,random_state=131416):
     ds_dic={}    
     start=time.time()
-
+    path=root+"/data/test/test_data.json"
 
     #Otros
     ds_dic["circles"] = datasets.make_circles(n_samples=n_samples, factor=0.5, noise=0.05)
@@ -82,7 +82,7 @@ def generate_test_data(n_samples=500,random_state=131416,path="./data/test_data.
     ds_dic["bcancer"] = datasets.load_breast_cancer(return_X_y=True)
     
     #Keels
-    dataset_path= os.getcwd()+"/data/datasets/"
+    dataset_path= root+"/data/datasets/"
 
     for file in os.listdir(dataset_path):   
         generator=get_dataframe_from_dat(dataset_path+file)
@@ -134,7 +134,7 @@ def generate_test_data(n_samples=500,random_state=131416,path="./data/test_data.
     return ds_dic
     print('Test datasets have been saved in a .json file:' + path +'\nTime taken: '+str(start-time.time()))
 
-def generate_train_data(dim=2,k_low=1,k_high=10,n_samples=500,n_blobs=10,initial_seed=1,val=False):
+def generate_train_data(root,orness=0.5,dim=2,k_low=1,k_high=10,n_samples=500,n_blobs=10,initial_seed=1,val=False):
 
     data,names,y = generate_blobs(dim=dim,k_low=k_low,k_high=k_high,n_samples=n_samples,n_blobs=n_blobs,initial_seed=initial_seed,get_class=False)
     classifiers=[KMeans]
@@ -159,16 +159,16 @@ def generate_train_data(dim=2,k_low=1,k_high=10,n_samples=500,n_blobs=10,initial
                 centroides=clf_.cluster_centers_
                 U=coverings(X,centroides,distance_normalizer=distance_normalizer)
                 
-                for a in orness: 
+                if orness/100==0.5: 
                     gci[i_d,k-1]=global_covering_index(U,function='mean')
-                    #gci[i_d,k]=global_covering_index(U,function='OWA',orness=a)
+                else:
+                    gci[i_d,k]=global_covering_index(U,function='OWA',orness=orness/100) # El orness va del 10 al 45
+    
     time_diff=time.time() - start_time                    
-
-    root=os.getcwd() +"/data/train/"
     
     if not val:
         np.save(file=root+"global_gci_blobs.npy", arr=gci)
-        pd.DataFrame(gci,columns=np.arange(len(K)+1),index=names).to_csv(root+"global_gci_blobs.csv")
+        pd.DataFrame(gci,columns=np.arange(len(K)+1),index=names).to_csv(root+f"global_gci_blobs_{str(orness)}.csv")
     else:
         np.save(file=root+"global_gci_blobs_val.npy", arr=gci)
 
@@ -180,32 +180,35 @@ def generate_train_data(dim=2,k_low=1,k_high=10,n_samples=500,n_blobs=10,initial
     p_e=d/s_c[:,:-1] #proporciones que se cubren en cada k
     if not val:
 
-        np.save(file=root+"global_sin_cubrir_blobs.npy", arr=s_c)
-        np.save(file=root+"global_diff_blobs.npy", arr=d)
-        np.save(file=root+"global_diff2_blobs.npy", arr=d2)
-        np.save(file=root+"global_prop_expl_blobs.npy", arr=p_e)
+        np.save(file=root+f"global_sin_cubrir_blobs_{str(orness)}.npy", arr=s_c)
+        np.save(file=root+f"global_diff_blobs_{str(orness)}.npy", arr=d)
+        np.save(file=root+f"global_diff2_blobs_{str(orness)}.npy", arr=d2)
+        np.save(file=root+f"global_prop_expl_blobs_{str(orness)}.npy", arr=p_e)
     
     else:
-        np.save(file=root+"global_sin_cubrir_blobs_val.npy", arr=s_c)
-        np.save(file=root+"global_diff_blobs_val.npy", arr=d)
-        np.save(file=root+"global_diff2_blobs_val.npy", arr=d2)
-        np.save(file=root+"global_prop_expl_blobs_val.npy", arr=p_e)
+        np.save(file=root+f"global_sin_cubrir_blobs_val_{str(orness)}.npy", arr=s_c)
+        np.save(file=root+f"global_diff_blobs_val_{str(orness)}.npy", arr=d)
+        np.save(file=root+f"global_diff2_blobs_val_{str(orness)}.npy", arr=d2)
+        np.save(file=root+f"global_prop_expl_blobs_val_{str(orness)}.npy", arr=p_e)
     
     print('Test datasets have been saved in a .npy files at:' + root +'\nTime taken: '+str(time_diff))
 
 if __name__ == "__main__":
-    ROOT= os.getcwd()
-    generate_train_data(dim=2,k_low=1,k_high=10,n_samples=500,n_blobs=10,initial_seed=10,val=True)
-    generate_train_data(dim=2,k_low=1,k_high=10,n_samples=500,n_blobs=10,initial_seed=10,val=False)
+    ROOT= os.path.abspath(os.path.join(os.getcwd(), os.pardir))
+
+    for orness in np.arange(10,50,5):
+        """
+        generate_train_data(orness=orness,root=ROOT+'/data/train/',dim=2,k_low=1,k_high=10,n_samples=500,n_blobs=10,initial_seed=1,val=True)
+        generate_train_data(orness=orness,root=ROOT+'/data/train/',dim=2,k_low=1,k_high=10,n_samples=500,n_blobs=10,initial_seed=10,val=False)
+        """
+        pass
     
-    ds_dic=generate_test_data(n_samples=500,random_state=131416,path="./data/test/test_data.json")
+    ds_dic=generate_test_data(n_samples=500,random_state=131416,root=ROOT)
     
-    
-    
+    """
     with open(ROOT+'/data/test/test_data.json') as json_file:
         data = json.loads(json.load(json_file))
-    
-    
+    """
 
     #Classifiers 
     classifiers = {
@@ -276,12 +279,6 @@ if __name__ == "__main__":
                 ch[index,k]=calinski_harabasz_score2(X,y_pred)
                 db[index,k]=davies_bouldin_score2(X,y_pred)
                 gci[index,k]=global_covering_index(U,function='mean')
-                
-            """  
-            nclases_pred_gci[index]=np.nanargmax( conds_score(gci_o[index,:].reshape(1,-1),u) )+1
-            nclases_pred_s[index]=np.nanargmax(s[index,:])+1
-            nclases_pred_ch[index]=np.nanargmax(ch[index,:])+1
-            """
 
     pd.DataFrame(y).to_csv(ROOT+"/data/test/y_.csv")
     pd.DataFrame(s,index=names).to_csv(ROOT+"/data/test/shilhouette_.csv")
