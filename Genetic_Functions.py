@@ -393,7 +393,7 @@ def GeneticAlgorithm(func,weight,GEN,n_pop,tolerance,CXPB,MUTPB,WARMUP,MAX_RESTA
                 child2_=toolbox.clone(child2)
 
                 if mode!="conds":
-                    child1_,child2_=toolbox.cross(child1, child2)
+                    child1_[:],child2_[:]=toolbox.cross(child1[:], child2[:])
 
                     for i in range(len(child1_)):
                         child1_[i]=min(max(child1_[i],pmin[i]),pmax[i])

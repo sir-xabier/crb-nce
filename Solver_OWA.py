@@ -50,6 +50,7 @@ def diferential_evolution(N,orness):
                 x0.append(1/(N/2))
         elif orness <= 0.2:
             if i == N-1:
+                
                 x0.append(1)
             else:
                 x0.append(0)
@@ -88,13 +89,13 @@ def experiment_diferential_evolution(args):
         
     for i in tqdm(range(0,len(N))):    
         for j in orness:
-            file_path=weight_folder+ "W_"+ str(N[i]) + '_' + str(j)
+            file_path=weight_folder+ "W_"+ str(N[i]) + '_' + str(int(j*100))
             time_on= time.time()
             if not os.path.exists(file_path):
                 w_optim=diferential_evolution(N[i],j)
                 np.save(file=file_path,arr=w_optim)
             time_diff= time.time()- time_on    
-            print("Experiment " + "W_"+ str(N[i]) + '_' + str(j)+ "has finished in: " + str(time_diff)+ " seconds")     
+            print("Experiment " + "W_"+ str(N[i]) + '_' +  str(int(j*100)) + "has finished in: " + str(time_diff)+ " seconds")     
 
 # Python program to use
 # main for function call.

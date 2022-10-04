@@ -38,16 +38,23 @@ for name,df_ in all_df.items():
 
 df=df[df["y"]!=0]
 
-#Metrics metrics
-mae= lambda a: np.mean(np.abs(a[0]-a[1]))
-median= lambda a: np.sort(np.abs(a[0]-a[1]))[a[0].shape[0]//2]
-acc= lambda a: np.sum(a[0]==a[1]) #BALANCED ACC IGUAL MEJOR!
-metrics=[mae,median,acc]
-
 df_metrics=pd.DataFrame(columns=["s","ch","db","gci_c","gci_a","gci_se","gci_si"],index=["MAE","Median","ACC"])
-
+#Global metrics
 for c in df.columns[:-1]:
     df_metrics[c]= [mean_absolute_error(df[c],df["y"]),median_absolute_error(df[c],df["y"]),accuracy_score(df[c],df["y"])]
+
+
+df= pd.DataFrame(np.abs(df.values-df.y.values)[:,:-1])
+
+df["algorithm"]=df.apply(lambda x: x.name.split("-")[-1],axis=1)
+df["dataset"]=df.apply(lambda x: x.name[:- (1+len(x["algorithm"]))],axis=1)
+df["seed"]=df.apply(lambda x: "1" if x.name[0]=="B" else x.name.split("-")[-2],axis=1)
+
+df.head(1)
+
+
+
+spike_cols = [col for col in df.columns if 'spike' in col]
 
 df.to_csv(ROOT+"/out_files/Results.csv")
 df_metrics.to_csv(ROOT+"/out_files/Results_metrics.csv")
