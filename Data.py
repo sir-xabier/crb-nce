@@ -219,10 +219,10 @@ if __name__ == "__main__":
     maxiter=100
 
     classifiers = {
-    cmeans:{'m':2,'maxiter':maxiter, 'error': 10**-6,'seed': seed},
+    KMeans:{'max_iter':maxiter,'n_init':1,'random_state':seed},
     KMedoids:{'max_iter':maxiter,'init':'k-medoids++'},
     AgglomerativeClustering:{},
-    KMeans:{'max_iter':maxiter,'n_init':1,'random_state':seed}}
+    cmeans:{'m':2,'maxiter':maxiter, 'error': 10**-6,'seed': seed}}
     
 
     #K-means ++ init
@@ -273,6 +273,7 @@ if __name__ == "__main__":
             
             y[index]=true_k
     
+
             for k in K:
 
                 if clf.__name__ == "AgglomerativeClustering":
@@ -289,7 +290,7 @@ if __name__ == "__main__":
                             initial_centers.append(kmeans_pp(X,k,seed+i))    
                             c0= initial_centers[-1]
                         else:
-                            c0= initial_centers[k*n_init + i]
+                            c0= initial_centers[(k-1)*n_init + i]
 
                         if clf.__name__ == "cmeans":
                             _,u_orig, _, _, this_err, nit, _ =clf(data=X.T,c=k,c0=c0,**args)
