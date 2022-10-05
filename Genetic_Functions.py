@@ -8,6 +8,20 @@ from deap import creator
 from deap import tools
 import random
 
+root_path=os.getcwd()
+gci= np.load(root_path+"/data/train/global_gci_blobs.npy",allow_pickle=True)
+s_c= np.load(root_path+"/data/train/global_sin_cubrir_blobs.npy",allow_pickle=True)
+d= np.load(root_path+"/data/train/global_diff_blobs.npy",allow_pickle=True)
+d2= np.load(root_path+"/data/train/global_diff2_blobs.npy",allow_pickle=True)
+p_e= np.load(root_path+"/data/train/global_prop_expl_blobs.npy",allow_pickle=True)
+
+gci_val= np.load(root_path+"/data/train/global_gci_blobs_val.npy",allow_pickle=True)
+s_c_val= np.load(root_path+"/data/train/global_sin_cubrir_blobs_val.npy",allow_pickle=True)
+d_val= np.load(root_path+"/data/train/global_diff_blobs_val.npy",allow_pickle=True)
+d2_val= np.load(root_path+"/data/train/global_diff2_blobs_val.npy",allow_pickle=True)
+p_e_val= np.load(root_path+"/data/train/global_prop_expl_blobs_val.npy",allow_pickle=True)
+
+
 def evalMAE_1(individual,val_mode=False):
     global gci
     global d
@@ -282,8 +296,8 @@ def GeneticAlgorithm(func,weight,GEN,n_pop,tolerance,CXPB,MUTPB,WARMUP,MAX_RESTA
 
     if mode=="complete":
 
-        pmin=[1.5,0.01,0.01,0,0,-0.1,1,2,1.5,1.5,1,0,0,0,0,0,0,0,0,0,0]
-        pmax=[20,0.5,0.5,1,1,0,5,20,10,10,10,1,1,1,1,1,1,1,1,1,1]
+        pmin=[1.5,0.01,0.01,0,0,-0.1,1, 2,1.5,1.5, 1,0,0,0,0,0,0,0,0,0,0]
+        pmax=[ 20, 0.5, 0.5,1,1,   0,5,20, 10, 10,10,1,1,1,1,1,1,1,1,1,1]
 
         toolbox.register("individual",tools.initCycle, creator.Individual,[toolbox.attr_ratio_diff, 
                     toolbox.attr_ratio, 
@@ -309,8 +323,8 @@ def GeneticAlgorithm(func,weight,GEN,n_pop,tolerance,CXPB,MUTPB,WARMUP,MAX_RESTA
         toolbox.register("evaluate", func)
     
     elif mode=="partial":
-        pmin=[1.5,0.01,0.01,0,0,-0.1,1,2,1.5,1.5]
-        pmax=[20,0.5,0.5,1,1,0,5,20,10,10]
+        pmin=[1.5,0.01,0.01,0,0,-0.1,1, 2,1.5,1.5]
+        pmax=[20 ,0.5 ,0.5 ,1,1,   0,5,20, 10,10]
 
         toolbox.register("individual",tools.initCycle, creator.Individual,[toolbox.attr_ratio_diff, 
                 toolbox.attr_ratio, 
@@ -325,8 +339,8 @@ def GeneticAlgorithm(func,weight,GEN,n_pop,tolerance,CXPB,MUTPB,WARMUP,MAX_RESTA
         toolbox.register("evaluate", func)
     
     elif mode=="conds":
-        pmin=[1.5,0.01,0.01,0,0,-0.1,1,2,1.5,1.5,0,0,0,0,0,0,0,0,0,0]
-        pmax=[20,0.5,0.5,1,1,0,5,20,10,10,1,1,1,1,1,1,1,1,1,1]
+        pmin=[1.5,0.01,0.01,0,0,-0.1,1,2 ,1.5,1.5,0,0,0,0,0,0,0,0,0,0]
+        pmax=[20 ,0.5 ,0.5 ,1,1, 0  ,5,20,10 , 10,1,1,1,1,1,1,1,1,1,1]
         
     
         toolbox.register("individual",tools.initCycle, creator.Individual,[toolbox.attr_ratio_diff, 
@@ -377,13 +391,16 @@ def GeneticAlgorithm(func,weight,GEN,n_pop,tolerance,CXPB,MUTPB,WARMUP,MAX_RESTA
     stats.register("max", np.max)
 
     logbook = tools.Logbook()
-    logbook.header = ["gen", "evals"] + stats.fields + ["val_error"]
+    logbook.header = ["gen", "tam_pop", "evals", "val_error", "restarts"] + stats.fields 
 
 
     # Inicializamos gbest como vector de ceros para que no influya en la primera generacion
     gbest = None
-
+    gbest_popact = None
+    gbest_val = None
+        
     for g in tqdm(range(GEN)):
+        no_converjas_ahora=0
         offspring = list(map(toolbox.clone, pop))
 
         # Apply crossover on the offspring
@@ -393,7 +410,7 @@ def GeneticAlgorithm(func,weight,GEN,n_pop,tolerance,CXPB,MUTPB,WARMUP,MAX_RESTA
                 child2_=toolbox.clone(child2)
 
                 if mode!="conds":
-                    child1_[:],child2_[:]=toolbox.cross(child1[:], child2[:])
+                    child1_,child2_=toolbox.cross(child1[:], child2[:])
 
                     for i in range(len(child1_)):
                         child1_[i]=min(max(child1_[i],pmin[i]),pmax[i])
@@ -415,7 +432,7 @@ def GeneticAlgorithm(func,weight,GEN,n_pop,tolerance,CXPB,MUTPB,WARMUP,MAX_RESTA
                 offspring.append(child1_)
                 offspring.append(child2_)
 
-        # Apply mutation on the offspring and control domain constrains
+        # Apply mutation on the offspring and control domain constraints
              
         for mutant in offspring:
             if random.random() < MUTPB:
@@ -450,30 +467,45 @@ def GeneticAlgorithm(func,weight,GEN,n_pop,tolerance,CXPB,MUTPB,WARMUP,MAX_RESTA
             if not gbest or ind.fitness.values < gbest.fitness.values:
                 gbest = creator.Individual(ind)
                 gbest.fitness.values = ind.fitness.values
+            if not gbest_popact or ind.fitness.values < gbest_popact.fitness.values:
+                gbest_popact = creator.Individual(ind)
+                gbest_popact.fitness.values = ind.fitness.values
 
+        best_list.append(gbest_popact[:])
+        best_list_fitness.append(gbest_popact.fitness.values)
+        val_err.append(toolbox.evaluate(gbest_popact,val_mode=True))
+        
+        if not gbest_val or val_err[-1] < gbest_val.fitness.values:
+            gbest_val = creator.Individual(gbest_popact)
+            gbest_val.fitness.values = val_err[-1]
+            if gbest_val and gbest_popact.fitness.values <= gbest.fitness.values:
+                gbest = creator.Individual(gbest_popact)
+                gbest.fitness.values = gbest_popact.fitness.values
+        
+        gbest_popact=None ####Para que en cada iteración evalúe en validación al mejor de la población actual
 
-        best_list.append(gbest[:])
-        best_list_fitness.append(gbest.fitness.values)
-
-        val_err.append(toolbox.evaluate(gbest,val_mode=True))
-
-        logbook.record(gen=g, evals=len(pop), val_error=val_err[g], **stats.compile(pop))
+        logbook.record(gen=g, tam_pop = len(pop), evals=len(invalid_ind), val_error=val_err[g], restarts=n_restart, **stats.compile(pop))
                 
         pop = list(toolbox.select(pop)); random.shuffle(pop)
         
         if g > WARMUP + last_restart:
             if best_list_fitness[-1]==best_list_fitness[max(-WARMUP,-10)] and n_restart < MAX_RESTART:
                 bob.append(gbest)
+                bob.append(gbest_val)
                 pop=toolbox.population()
+                gbest=None
+                gbest_val=None
                 last_restart=g
                 n_restart+=1
 
                 if n_restart==MAX_RESTART:
+                    no_converjas_ahora=1
                     for i,e in enumerate(bob):
                         pop[i][:]=e
                 
-        if abs(logbook[-1]["min"]-logbook[-1]["avg"])<tolerance and n_restart==MAX_RESTART:
-            break    
+        if abs(logbook[-1]["min"]-logbook[-1]["avg"])<tolerance and n_restart==MAX_RESTART and not no_converjas_ahora:
+            break
+        
     return pop, logbook, best_list,best_list_fitness, g,val_err
 
 

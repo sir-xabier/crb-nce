@@ -16,7 +16,6 @@ if __name__=="__main__":
                 'Criterio_ajustado':{'func':evalMAE_2,'mode':"partial"},
                 'Criterio_complejo':{'func':evalMAE_1,'mode':"complete"}}
 
-    iter = 1
     tolerance = 5
     n_pop = 5
     CXPB=0.9

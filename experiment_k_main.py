@@ -26,10 +26,14 @@ all_df={"s":df_s,"ch":df_ch,"db":df_db,"gci":df_gci,"y":df_y}
 df=pd.DataFrame(columns=["s","ch","db","gci_c","gci_a","gci_se","gci_si","y"],index=df_s.index)
 
 select_k= lambda x: np.nanargmax(x)+1
+select_k_db= lambda x: np.nanargmin(x)+1
 
 for name,df_ in all_df.items():
   if name!="y" and ("gci" in name)==False:
-    df[name] = df_.apply(select_k,axis=1).values.reshape(-1,1)
+    if name=="db":
+      df[name] = df_.apply(select_k_db,axis=1).values.reshape(-1,1)
+    else:
+      df[name] = df_.apply(select_k,axis=1).values.reshape(-1,1)
   elif "gci" in name:
     for criterio,args in optimal_u.items():
         df[name + criterio] = df_.apply(lambda x: conds_score(gci_=x,id=x.name,**args),axis=1).values.reshape(-1,1) 
@@ -44,17 +48,30 @@ for c in df.columns[:-1]:
     df_metrics[c]= [mean_absolute_error(df[c],df["y"]),median_absolute_error(df[c],df["y"]),accuracy_score(df[c],df["y"])]
 
 
-df= pd.DataFrame(np.abs(df.values-df.y.values)[:,:-1])
+df_= pd.DataFrame(np.abs(df.drop('y', axis=1).values -df.y.values.reshape(-1,1)),columns=["s","ch","db","gci_c","gci_a","gci_se","gci_si"],index=df_s.index)
+df_.head()
 
-df["algorithm"]=df.apply(lambda x: x.name.split("-")[-1],axis=1)
-df["dataset"]=df.apply(lambda x: x.name[:- (1+len(x["algorithm"]))],axis=1)
-df["seed"]=df.apply(lambda x: "1" if x.name[0]=="B" else x.name.split("-")[-2],axis=1)
-
-df.head(1)
-
+df_["algorithm"]=df_.apply(lambda x: x.name.split("-")[-1],axis=1)
+df_["dataset"]=df_.apply(lambda x: x.name[:- (1+len(x["algorithm"]))] if "blobs-" not in x.name else x.name[:- (4+len(x["algorithm"]))] ,axis=1)
+df_["seed"]=df_.apply(lambda x: "Control" if "blobs-" not in x.name else x.name.split("-")[-2],axis=1)
 
 
-spike_cols = [col for col in df.columns if 'spike' in col]
+acc= lambda x: len(np.where(x==0)[0])/len(x)
+
+df_.drop(columns=["algorithm","seed"],axis=1).groupby("dataset").mean().to_csv(ROOT+"/out_files/Results_mean_dataset.csv")
+df_.drop(columns=["dataset","seed"],axis=1).groupby("algorithm").mean().to_csv(ROOT+"/out_files/Results_mean_algorithm.csv")
+df_.drop(columns=["dataset","algorithm"],axis=1).groupby("seed").mean().to_csv(ROOT+"/out_files/Results_mean_seed.csv")
+
+
+df_.drop(columns=["algorithm","seed"],axis=1).groupby("dataset").median().to_csv(ROOT+"/out_files/Results_median_dataset.csv")
+df_.drop(columns=["dataset","seed"],axis=1).groupby("algorithm").median().to_csv(ROOT+"/out_files/Results_median_algorithm.csv")
+df_.drop(columns=["dataset","algorithm"],axis=1).groupby("seed").median().to_csv(ROOT+"/out_files/Results_median_seed.csv")
+
+
+df_.drop(columns=["algorithm","seed"],axis=1).groupby("dataset").agg(acc).to_csv(ROOT+"/out_files/Results_acc_dataset.csv")
+df_.drop(columns=["dataset","seed"],axis=1).groupby("algorithm").agg(acc).to_csv(ROOT+"/out_files/Results_acc_algorithm.csv")
+df_.drop(columns=["dataset","algorithm"],axis=1).groupby("seed").agg(acc).to_csv(ROOT+"/out_files/Results_acc_seed.csv")
+
 
 df.to_csv(ROOT+"/out_files/Results.csv")
 df_metrics.to_csv(ROOT+"/out_files/Results_metrics.csv")

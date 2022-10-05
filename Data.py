@@ -12,8 +12,9 @@ import numpy as np
 from tqdm import tqdm
 import tqdm.notebook as tq
 from sklearn.cluster import KMeans,SpectralClustering,AgglomerativeClustering
-from skfuzzy.cluster import cmeans
+from cmeans import cmeans
 from sklearn_extra.cluster import KMedoids
+from sklearn.cluster import kmeans_plusplus
 
 from sklearn.preprocessing import StandardScaler
 
@@ -203,24 +204,34 @@ if __name__ == "__main__":
         """
         pass
     
+    """
     ds_dic=generate_test_data(n_samples=500,random_state=131416,root=ROOT)
     
     """
     with open(ROOT+'/data/test/test_data.json') as json_file:
-        data = json.loads(json.load(json_file))
-    """
+        ds_dic = json.loads(json.load(json_file))
+    
 
     #Classifiers 
+    
+    seed=31416
+    n_init=10
+    maxiter=100
+
     classifiers = {
+    cmeans:{'m':2,'maxiter':maxiter, 'error': 10**-6,'seed': seed},
+    KMedoids:{'max_iter':maxiter,'init':'k-medoids++'},
     AgglomerativeClustering:{},
-    KMeans:{'max_iter':100,'random_state':31416},
-    KMedoids:{'max_iter':100,'random_state':31416},
-    cmeans:{'m':2,'maxiter':100, 'error': 10**-6,'seed': 31416}}
+    KMeans:{'max_iter':maxiter,'n_init':1,'random_state':seed}}
+    
+
+    #K-means ++ init
+    kmeans_pp=lambda X,c,s: kmeans_plusplus(X, n_clusters=c, random_state=s)[0] 
 
     #SpectralClustering: {'assign_labels':'discretize'}
 
     N=len(ds_dic)*len(classifiers)
-    K=range(1,25+1)
+    K=range(1,30+1)
 
     #Índices   
     s=np.zeros((N,len(K)+1))
@@ -250,6 +261,8 @@ if __name__ == "__main__":
         X = StandardScaler().fit_transform(X)
         distance_normalizer=1/np.sqrt(25*X.shape[1])
         
+        initial_centers=[]
+
         for i_a,dic in enumerate(classifiers.items()):
             index=i_d*len(classifiers) + i_a
             
@@ -261,27 +274,50 @@ if __name__ == "__main__":
             y[index]=true_k
     
             for k in K:
-                if clf.__name__ == "cmeans":
-                    centroides,u_orig, _, _, _, _, _ =clf(X.T,k,**args)
-                    centroides=np.array(centroides)
-                    y_pred=  u_orig.argmax(axis=0)
-                
-                else:
+
+                if clf.__name__ == "AgglomerativeClustering":
                     clf_=clf(n_clusters=k,**args)
                     y_pred=clf_.fit_predict(X)
-                    if clf.__name__ =="SpectralClustering":
-                        centroides=clf_.cluster_centers_
-                    else: 
-                        centroides=np.array([np.mean(X[y_pred==i],axis=0) for i in np.unique(np.arange(k))])
+                    centroides=np.array([np.mean(X[y_pred==i],axis=0) for i in np.unique(np.arange(k))])
+  
+                else:
+                    best_sol_err=np.inf
+                    y_best_sol=None
+
+                    for i in range(0,n_init):
+                        if i_a==0:
+                            initial_centers.append(kmeans_pp(X,k,seed+i))    
+                            c0= initial_centers[-1]
+                        else:
+                            c0= initial_centers[k*n_init + i]
+
+                        if clf.__name__ == "cmeans":
+                            _,u_orig, _, _, this_err, nit, _ =clf(data=X.T,c=k,c0=c0,**args)
+                            this_err=this_err[-1]
+                            y_pred=  u_orig.T.argmax(axis=1).reshape(1,-1)[0]
+                        else:
+                            if clf.__name__ == "KMeans":
+                                clf_=clf(n_clusters=k,init=c0,**args)
+                            else:
+                                clf_=clf(n_clusters=k,random_state=seed+i,**args)
+                            fitted=clf_.fit(X)
+                            y_pred=fitted.predict(X)
+                            this_err=fitted.inertia_
+
+                        if this_err<best_sol_err:
+                            best_sol_err=this_err
+                            y_best_sol=y_pred
+                centroides=np.array([np.mean(X[y_best_sol==i],axis=0) for i in np.unique(np.arange(k))])
+                
             
                 U=coverings(X,centroides,distance_normalizer=distance_normalizer)
-                s[index,k]=silhouette_score2(X,y_pred)
-                ch[index,k]=calinski_harabasz_score2(X,y_pred)
-                db[index,k]=davies_bouldin_score2(X,y_pred)
+                s[index,k]=silhouette_score2(X,y_best_sol)
+                ch[index,k]=calinski_harabasz_score2(X,y_best_sol)
+                db[index,k]=davies_bouldin_score2(X,y_best_sol)
                 gci[index,k]=global_covering_index(U,function='mean')
 
     pd.DataFrame(y).to_csv(ROOT+"/data/test/y_.csv")
-    pd.DataFrame(s,index=names).to_csv(ROOT+"/data/test/shilhouette_.csv")
-    pd.DataFrame(ch,index=names).to_csv(ROOT+"/data/test/calinski_harabasz_.csv")
-    pd.DataFrame(db,index=names).to_csv(ROOT+"/data/test/davies_boulding_.csv")
-    pd.DataFrame(gci,index=names).to_csv(ROOT+"/data/test/gci_.csv")
+    pd.DataFrame(s,index=names).to_csv(ROOT+"/data/test/shilhouette_1.csv")
+    pd.DataFrame(ch,index=names).to_csv(ROOT+"/data/test/calinski_harabasz_1.csv")
+    pd.DataFrame(db,index=names).to_csv(ROOT+"/data/test/davies_boulding_1.csv")
+    pd.DataFrame(gci,index=names).to_csv(ROOT+"/data/test/gci_1.csv")
