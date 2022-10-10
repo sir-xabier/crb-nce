@@ -12,9 +12,8 @@ import numpy as np
 from tqdm import tqdm
 import tqdm.notebook as tq
 from sklearn.cluster import KMeans,SpectralClustering,AgglomerativeClustering
-from cmeans import cmeans
+from skfuzzy.cluster import cmeans
 from sklearn_extra.cluster import KMedoids
-from sklearn.cluster import kmeans_plusplus
 
 from sklearn.preprocessing import StandardScaler
 
@@ -42,13 +41,13 @@ def generate_blobs(n_blobs=10,k_low=1,k_high=10,dim=2,n_samples=500,initial_seed
     n_clases=[]
     names=[]
     for i in range(k_low,k_high+1,inter):
-        for n in (np.arange(n_blobs)+1):
+        for n in (np.arange(n_blobs)):
             blobs = datasets.make_blobs(n_samples=n_samples,
                                         n_features=dim,
                                         centers=i,
                                         random_state=initial_seed+n) 
             data.append(blobs) if get_class else data.append(blobs[0]) 
-            names.append('blobs-P'+str(dim)+'-K'+str(i)+'-N'+str(n_samples)+'-S'+str(n))
+            names.append('blobs-P'+str(dim)+'-K'+str(i)+'-N'+str(n_samples)+'-S'+str(n+1))
             n_clases.append(i)
         
     if not get_class:
@@ -57,10 +56,10 @@ def generate_blobs(n_blobs=10,k_low=1,k_high=10,dim=2,n_samples=500,initial_seed
         return names,data
 
 
-def generate_test_data(root,n_samples=500,random_state=131416):
+def generate_test_data(n_samples=500,random_state=131416,path="./data/test_data.json"):
     ds_dic={}    
     start=time.time()
-    path=root+"/data/test/test_data.json"
+
 
     #Otros
     ds_dic["circles"] = datasets.make_circles(n_samples=n_samples, factor=0.5, noise=0.05)
@@ -83,7 +82,7 @@ def generate_test_data(root,n_samples=500,random_state=131416):
     ds_dic["bcancer"] = datasets.load_breast_cancer(return_X_y=True)
     
     #Keels
-    dataset_path= root+"/data/datasets/"
+    dataset_path= os.getcwd()+"/data/datasets/"
 
     for file in os.listdir(dataset_path):   
         generator=get_dataframe_from_dat(dataset_path+file)
@@ -93,7 +92,7 @@ def generate_test_data(root,n_samples=500,random_state=131416):
     #1. Datasets artificiales
     #Blobs
 
-        #Escenario 3: p=2 | k=1-10 | n=500  
+        #Escenario 1: p=2 | k=1-10 | n=500  
     blobs_=generate_blobs(dim=2,k_low=1,k_high=10,n_samples=500,n_blobs=10,initial_seed=20,get_class=True)
 
     for i,key in enumerate(blobs_[0]):
@@ -132,10 +131,13 @@ def generate_test_data(root,n_samples=500,random_state=131416):
     with open(path, 'w') as outfile:
         json.dump(json_string, outfile)
     
-    return ds_dic
     print('Test datasets have been saved in a .json file:' + path +'\nTime taken: '+str(start-time.time()))
+    
+    return ds_dic
+    
 
-def generate_train_data(root,orness=0.5,dim=2,k_low=1,k_high=10,n_samples=500,n_blobs=10,initial_seed=1,val=False):
+def generate_train_data(dim=2,k_low=1,k_high=10,n_samples=500,n_blobs=10,
+                        max_K=30,initial_seed=1,val=False):
 
     data,names,y = generate_blobs(dim=dim,k_low=k_low,k_high=k_high,n_samples=n_samples,n_blobs=n_blobs,initial_seed=initial_seed,get_class=False)
     classifiers=[KMeans]
@@ -143,7 +145,7 @@ def generate_train_data(root,orness=0.5,dim=2,k_low=1,k_high=10,n_samples=500,n_
 
     N=len(classifiers)*len(orness)*len(data)
 
-    K=range(1,20+1)
+    K=range(1,max_K+1)
     gci=np.zeros((N,len(K)+1))
     gci[:,-1]=np.array(y)
 
@@ -160,86 +162,115 @@ def generate_train_data(root,orness=0.5,dim=2,k_low=1,k_high=10,n_samples=500,n_
                 centroides=clf_.cluster_centers_
                 U=coverings(X,centroides,distance_normalizer=distance_normalizer)
                 
-                if orness/100==0.5: 
+                for a in orness: 
                     gci[i_d,k-1]=global_covering_index(U,function='mean')
-                else:
-                    gci[i_d,k]=global_covering_index(U,function='OWA',orness=orness/100) # El orness va del 10 al 45
-    
+                    #gci[i_d,k]=global_covering_index(U,function='OWA',orness=a)
     time_diff=time.time() - start_time                    
+
+    root=os.getcwd() +"/data/train/"
     
     if not val:
-        np.save(file=root+"global_gci_blobs.npy", arr=gci)
-        pd.DataFrame(gci,columns=np.arange(len(K)+1),index=names).to_csv(root+f"global_gci_blobs_{str(orness)}.csv")
+        np.save(file=root+"global_gci_blobs25.npy", arr=gci)
+        pd.DataFrame(gci,columns=np.arange(len(K)+1),index=names).to_excel(root+"global_gci_blobs25.xlsx")
     else:
-        np.save(file=root+"global_gci_blobs_val.npy", arr=gci)
+        np.save(file=root+"global_gci_blobs25_val.npy", arr=gci)
+        pd.DataFrame(gci,columns=np.arange(len(K)+1),index=names).to_excel(root+"global_gci_blobs25_val.xlsx")
 
     gci=gci[:,:-1] 
     
-    s_c=1-gci #proporción sin cubrimiento total
-    d=np.diff(gci,axis=1)
-    d2=np.diff(d,axis=1)
-    p_e=d/s_c[:,:-1] #proporciones que se cubren en cada k
+    s_c=1-gci #proporción sin cubrimiento total max_K
+    d=np.diff(gci,axis=1) # max_K-1
+    d2=np.diff(d,axis=1) # max_K-2
+    p_e=d/s_c[:,:-1] #proporciones que se cubren en cada k respecto a prop sin cubrir max_K-1
+    r_d=d[:,:-1]/d[:,1:] # ratio diferencias max_K-2
+    r_d2=d2[:,:-1]/d2[:,1:] # ratio diferencias 2 max_K-3
+    r_l=d/gci[:,:-1] # ratio relativo max_K-1
+    r_e=p_e[:,:-1]/p_e[:,1:] # ratio proporciones cubiertas max_K-1
+    
+    p_n=d2.copy()
+    p_e_m=d2.copy()
+    c_d=d2.copy()
+    c_d2=r_d2.copy()
+    m_d2=r_d2.copy()
+    
+    for i in range(0,max_K-2):
+        p_e_m[:,i]=np.sum(p_e[:,:i+1]>=p_e[:,i],axis=1)/(i+1) #prop props exp mayores que actual max_K-2
+        p_n[:,i]=np.sum(d2[:,:i+1]<0,axis=1)/(i+1) #prop dif2 negativas hasta i max_K-2
+        c_d[:,i]=d[:,i]/np.amax(d[:,i+1:],axis=1) # cola diferencia 1 max_K-2
+        if i < max_K-3:
+            c_d2[:,i]=d2[:,i]/np.amin(d2[:,i+1:],axis=1) #cola diferencia 2 max_K-3
+            m_d2[:,i]=np.amin(d2[:,i+1:],axis=1) # mínimo valores restantes dif2 max_K-3
+
     if not val:
 
-        np.save(file=root+f"global_sin_cubrir_blobs_{str(orness)}.npy", arr=s_c)
-        np.save(file=root+f"global_diff_blobs_{str(orness)}.npy", arr=d)
-        np.save(file=root+f"global_diff2_blobs_{str(orness)}.npy", arr=d2)
-        np.save(file=root+f"global_prop_expl_blobs_{str(orness)}.npy", arr=p_e)
+        #np.save(file=root+"global_sin_cubrir_blobs25.npy", arr=s_c)
+        np.save(file=root+"global_diff_blobs25.npy", arr=d)
+        np.save(file=root+"global_diff2_blobs25.npy", arr=d2)
+        #np.save(file=root+"global_prop_expl_blobs25.npy", arr=p_e)
+        np.save(file=root+"global_ratio_dif_blobs25.npy", arr=r_d)
+        np.save(file=root+"global_ratio_dif2_blobs25.npy", arr=r_d2)
+        np.save(file=root+"global_ratio_rel_blobs25.npy", arr=r_l)
+        np.save(file=root+"global_ratio_exp_blobs25.npy", arr=r_e)
+        np.save(file=root+"global_prop_dif2_neg_blobs25.npy", arr=p_n)
+        np.save(file=root+"global_prop_exp_mayor_blobs25.npy", arr=p_e_m)
+        np.save(file=root+"global_cola_dif1_blobs25.npy", arr=c_d)
+        np.save(file=root+"global_cola_dif2_blobs25.npy", arr=c_d2)
+        np.save(file=root+"global_min_dif2_blobs25.npy", arr=m_d2)
     
     else:
-        np.save(file=root+f"global_sin_cubrir_blobs_val_{str(orness)}.npy", arr=s_c)
-        np.save(file=root+f"global_diff_blobs_val_{str(orness)}.npy", arr=d)
-        np.save(file=root+f"global_diff2_blobs_val_{str(orness)}.npy", arr=d2)
-        np.save(file=root+f"global_prop_expl_blobs_val_{str(orness)}.npy", arr=p_e)
+        #np.save(file=root+"global_sin_cubrir_blobs25_val.npy", arr=s_c)
+        np.save(file=root+"global_diff_blobs25_val.npy", arr=d)
+        np.save(file=root+"global_diff2_blobs25_val.npy", arr=d2)
+        #np.save(file=root+"global_prop_expl_blobs25_val.npy", arr=p_e)
+        np.save(file=root+"global_ratio_dif_blobs25_val.npy", arr=r_d)
+        np.save(file=root+"global_ratio_dif2_blobs25_val.npy", arr=r_d2)
+        np.save(file=root+"global_ratio_rel_blobs25_val.npy", arr=r_l)
+        np.save(file=root+"global_ratio_exp_blobs25_val.npy", arr=r_e)
+        np.save(file=root+"global_prop_dif2_neg_blobs25_val.npy", arr=p_n)
+        np.save(file=root+"global_prop_exp_mayor_blobs25_val.npy", arr=p_e_m)
+        np.save(file=root+"global_cola_dif1_blobs25_val.npy", arr=c_d)
+        np.save(file=root+"global_cola_dif2_blobs25_val.npy", arr=c_d2)
+        np.save(file=root+"global_min_dif2_blobs25_val.npy", arr=m_d2)
     
-    print('Test datasets have been saved in a .npy files at:' + root +'\nTime taken: '+str(time_diff))
+    print('Train datasets have been saved in a .npy files at:' + root +'\nTime taken: '+str(time_diff))
 
 if __name__ == "__main__":
-    ROOT= os.path.abspath(os.path.join(os.getcwd(), os.pardir))
-
-    for orness in np.arange(10,50,5):
-        """
-        generate_train_data(orness=orness,root=ROOT+'/data/train/',dim=2,k_low=1,k_high=25,n_samples=500,n_blobs=10,initial_seed=1,val=True)
-        generate_train_data(orness=orness,root=ROOT+'/data/train/',dim=2,k_low=1,k_high=25,n_samples=500,n_blobs=10,initial_seed=10,val=False)
-        """
-        pass
+    ROOT= os.getcwd()
     
-    """
-    ds_dic=generate_test_data(n_samples=500,random_state=131416,root=ROOT)
+    max_K=35
     
-    """
+    generate_train_data(dim=2,k_low=1,k_high=25,n_samples=500,n_blobs=10,
+                        max_K=max_K,initial_seed=0,val=True)
+    generate_train_data(dim=2,k_low=1,k_high=25,n_samples=500,n_blobs=10,
+                        max_K=max_K,initial_seed=10,val=False)
+    
+    ds_dic=generate_test_data(n_samples=500,random_state=131416,path="./data/test/test_data.json")
+    
+    
+    
     with open(ROOT+'/data/test/test_data.json') as json_file:
-        ds_dic = json.loads(json.load(json_file))
+        data = json.loads(json.load(json_file))
+    
     
 
     #Classifiers 
-    
-    seed=31416
-    n_init=10
-    maxiter=100
-
     classifiers = {
-    KMeans:{'max_iter':maxiter,'n_init':1,'random_state':seed},
-    KMedoids:{'max_iter':maxiter,'init':'k-medoids++'},
     AgglomerativeClustering:{},
-    cmeans:{'m':2,'maxiter':maxiter, 'error': 10**-6,'seed': seed}}
-    
-
-    #K-means ++ init
-    kmeans_pp=lambda X,c,s: kmeans_plusplus(X, n_clusters=c, random_state=s)[0] 
+    KMeans:{'max_iter':100,'random_state':31416},
+    KMedoids:{'max_iter':100,'random_state':31416},
+    cmeans:{'m':2,'maxiter':100, 'error': 10**-6,'seed': 31416}}
 
     #SpectralClustering: {'assign_labels':'discretize'}
 
     N=len(ds_dic)*len(classifiers)
-    K=range(1,30+1)
+    K=range(1,25+1)    ########AL MENOS HASTA 30??
 
-    #Índices   
+    #Índices
     s=np.zeros((N,len(K)+1))
     ch=np.zeros((N,len(K)+1))
     db=np.zeros((N,len(K)+1))
     gci=np.zeros((N,len(K)+1))
 
-    nclases_pred_gci=np.zeros(N,dtype=int)
     nclases_pred_gci=np.zeros(N,dtype=int)
     nclases_pred_s=np.zeros(N,dtype=int)
     nclases_pred_ch=np.zeros(N,dtype=int)
@@ -261,8 +292,6 @@ if __name__ == "__main__":
         X = StandardScaler().fit_transform(X)
         distance_normalizer=1/np.sqrt(25*X.shape[1])
         
-        initial_centers=[]
-
         for i_a,dic in enumerate(classifiers.items()):
             index=i_d*len(classifiers) + i_a
             
@@ -272,52 +301,35 @@ if __name__ == "__main__":
             names[index]= name+ "-"+ clf.__name__ 
             
             y[index]=true_k
-
+    
             for k in K:
-
-                if clf.__name__ == "AgglomerativeClustering":
+                if clf.__name__ == "cmeans":
+                    centroides,u_orig, _, _, _, _, _ =clf(X.T,k,**args)
+                    centroides=np.array(centroides)
+                    y_pred=  u_orig.argmax(axis=0)
+                
+                else:
                     clf_=clf(n_clusters=k,**args)
                     y_pred=clf_.fit_predict(X)
-                    centroides=np.array([np.mean(X[y_pred==i],axis=0) for i in np.unique(np.arange(k))])
-  
-                else:
-                    best_sol_err=np.inf
-                    y_best_sol=None
-
-                    for i in range(0,n_init):
-                        if i_a==0:
-                            initial_centers.append(kmeans_pp(X,k,seed+i))    
-                            c0= initial_centers[-1]
-                        else:
-                            c0= initial_centers[(k-1)*n_init + i]
-
-                        if clf.__name__ == "cmeans":
-                            _,u_orig, _, _, this_err, nit, _ =clf(data=X.T,c=k,c0=c0,**args)
-                            this_err=this_err[-1]
-                            y_pred=  u_orig.T.argmax(axis=1).reshape(1,-1)[0]
-                        else:
-                            if clf.__name__ == "KMeans":
-                                clf_=clf(n_clusters=k,init=c0,**args)
-                            else:
-                                clf_=clf(n_clusters=k,random_state=seed+i,**args)
-                            fitted=clf_.fit(X)
-                            y_pred=fitted.predict(X)
-                            this_err=fitted.inertia_
-
-                        if this_err<best_sol_err:
-                            best_sol_err=this_err
-                            y_best_sol=y_pred
-                centroides=np.array([np.mean(X[y_best_sol==i],axis=0) for i in np.unique(np.arange(k))])
+                    if clf.__name__ =="SpectralClustering":
+                        centroides=clf_.cluster_centers_
+                    else: 
+                        centroides=np.array([np.mean(X[y_pred==i],axis=0) for i in np.unique(np.arange(k))])
             
                 U=coverings(X,centroides,distance_normalizer=distance_normalizer)
-                s[index,k]=silhouette_score2(X,y_best_sol)
-                ch[index,k]=calinski_harabasz_score2(X,y_best_sol)
-                db[index,k]=davies_bouldin_score2(X,y_best_sol)
+                s[index,k]=silhouette_score2(X,y_pred)
+                ch[index,k]=calinski_harabasz_score2(X,y_pred)
+                db[index,k]=davies_bouldin_score2(X,y_pred)
                 gci[index,k]=global_covering_index(U,function='mean')
+                
+            """  
+            nclases_pred_gci[index]=np.nanargmax( conds_score(gci_o[index,:].reshape(1,-1),u) )+1
+            nclases_pred_s[index]=np.nanargmax(s[index,:])+1
+            nclases_pred_ch[index]=np.nanargmax(ch[index,:])+1
+            """
 
     pd.DataFrame(y).to_csv(ROOT+"/data/test/y_.csv")
-    pd.DataFrame(s,index=names).to_csv(ROOT+"/data/test/shilhouette_1.csv")
-    pd.DataFrame(ch,index=names).to_csv(ROOT+"/data/test/calinski_harabasz_1.csv")
-    pd.DataFrame(db,index=names).to_csv(ROOT+"/data/test/davies_boulding_1.csv")
-    pd.DataFrame(gci,index=names).to_csv(ROOT+"/data/test/gci_1.csv")
-
+    pd.DataFrame(s,index=names).to_csv(ROOT+"/data/test/shilhouette_.csv")
+    pd.DataFrame(ch,index=names).to_csv(ROOT+"/data/test/calinski_harabasz_.csv")
+    pd.DataFrame(db,index=names).to_csv(ROOT+"/data/test/davies_boulding_.csv")
+    pd.DataFrame(gci,index=names).to_csv(ROOT+"/data/test/gci_.csv")

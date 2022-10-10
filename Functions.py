@@ -274,6 +274,175 @@ def parada_conds(gci,nmin):
     return np.argmax(pts)+nmin,pts
         
 import math
+def conds_score2(gci_,id,u,p=None,c=None,b=None):
+    
+    if "nan"==str(id):
+        return np.NAN
+
+    k=gci_.shape[0]
+    s_c=1-gci_ #proporción sin cubrimiento total
+    d=np.diff(gci_)
+    d2=np.diff(d)
+    p_e=d/s_c[:-1] #proporciones que se cubren en cada k
+   
+    pts=np.zeros(k)
+
+    if p is None and c is None:
+        pts[0]=9-(b[0]*1+b[1]*2)
+        for i in range(1,d.shape[0]):
+            pts[i]=i/d.shape[0] #fracción creciente
+            
+            r_d=d[i-1]/d[i] #condición sobre ratio de diferencias
+            r_l=(gci_[i]-gci_[i-1])/gci_[i-1] #ratio relativo
+            p_n=sum(d2[:i]<0)/i #proporción de 2as dif negativas hasta k
+            p_e_m=sum(p_e[:i]>=p_e[i-1])/i #prop de cubrimientos marginales anteriores mayores que el actual
+            r_e=p_e[i-1]/p_e[i] #ratio de cubrimientos marginales
+
+            if i < d2.shape[0]-1: 
+                r_d2=d2[i-1]/d2[i] #ratio de 2as dif
+
+            if r_d > u[0]: 
+                pts[i]+=1
+                
+            if r_l > u[1]: 
+                pts[i]+=1
+
+            if d[i-1]> u[2]: 
+                pts[i]+=1
+
+            if p_n > u[3]: 
+                pts[i]+=1
+            
+            if p_e_m > u[4]: 
+                pts[i]+=1
+
+            #condicion sobre valores restantes de la 2a dif
+            if i < d2.shape[0]-1 and min(d2[i:]) > u[5]: 
+                pts[i]+=1
+            
+            if r_e > u[6]: pts[i]+=1
+            
+            if i < d2.shape[0]-1 and abs(r_d2) > u[7]: 
+                pts[i]+=1
+                
+            #ratio de 1a dif actual respecto a max de dif restantes
+            if d[i-1]/max(d[i:]) > u[8]: 
+                pts[i]+=1
+                
+            #ratio de 2a dif actual respecto a min de 2as dif restantes
+            if i < d2.shape[0]-1 and d2[i-1]/min(d2[i:]) >u[9]:
+                pts[i]+=1
+                
+        return np.argmax(pts)+1
+    
+    elif p is not None:
+        pts[0]=1
+        for i in range(1,d.shape[0]):
+                        
+            r_d=d[i-1]/d[i] #condición sobre ratio de diferencias
+            r_l=(gci_[i]-gci_[i-1])/gci_[i-1] #ratio relativo
+            p_n=sum(d2[:i]<0)/i #proporción de 2as dif negativas hasta k
+            p_e_m=sum(p_e[:i]>=p_e[i-1])/i #prop de cubrimientos marginales anteriores mayores que el actual
+            r_e=p_e[i-1]/p_e[i] #ratio de cubrimientos marginales
+            if i < d2.shape[0]-1: 
+                r_d2=d2[i-1]/d2[i] #ratio de 2as dif
+
+            if r_d > u[0]: 
+                pts[i]+=p[0]
+                
+            if r_l > u[1]: 
+                pts[i]+=p[1]
+
+            if d[i-1]> u[2]: 
+                pts[i]+=p[2]
+
+            if p_n > u[3]: 
+                pts[i]+=p[3]
+            
+            if p_e_m > u[4]: 
+                pts[i]+=p[4]
+
+            #condicion sobre valores restantes de la 2a dif
+            if i < d2.shape[0]-1 and min(d2[i:]) > u[5]: 
+                pts[i]+=p[5]
+            
+            if r_e > u[6]: pts[i]+=p[6]
+            
+            if i < d2.shape[0]-1 and abs(r_d2) > u[7]: 
+                pts[i]+=p[7]
+                
+            #ratio de 1a dif actual respecto a max de dif restantes
+            if d[i-1]/max(d[i:]) > u[8]: 
+                pts[i]+=p[8]
+                
+            #ratio de 2a dif actual respecto a min de 2as dif restantes
+            if i < d2.shape[0]-1 and d2[i-1]/min(d2[i:]) >u[9]:
+                pts[i]+=p[9]
+                
+            if np.abs(pts[i]-1.0) < 1e-15: pts[i]=1.0
+            elif np.abs(pts[i]-2.0) < 1e-15: pts[i]=2.0
+            elif np.abs(pts[i]-3.0) < 1e-15: pts[i]=3.0
+            elif np.abs(pts[i]-4.0) < 1e-15: pts[i]=4.0
+            elif np.abs(pts[i]-5.0) < 1e-15: pts[i]=5.0
+            elif np.abs(pts[i]-6.0) < 1e-15: pts[i]=6.0
+            elif np.abs(pts[i]-7.0) < 1e-15: pts[i]=7.0
+            elif np.abs(pts[i]-8.0) < 1e-15: pts[i]=8.0
+            elif np.abs(pts[i]-9.0) < 1e-15: pts[i]=9.0
+            elif np.abs(pts[i]-10.0) < 1e-15: pts[i]=10.0
+                
+        return np.amax(np.asarray(pts==np.amax(pts)).nonzero())+1
+    
+    elif c is not None:
+        pts[0]=np.amax([np.sum(c)-(b[0]*1+b[1]*2),1])
+        for i in range(1,d.shape[0]):
+            pts[i]=i/d.shape[0] #fracción creciente
+            
+            r_d=d[i-1]/d[i] #condición sobre ratio de diferencias
+            r_l=(gci_[i]-gci_[i-1])/gci_[i-1] #ratio relativo
+            p_n=sum(d2[:i]<0)/i #proporción de 2as dif negativas hasta k
+            p_e_m=sum(p_e[:i]>=p_e[i-1])/i #prop de cubrimientos marginales anteriores mayores que el actual
+            r_e=p_e[i-1]/p_e[i] #ratio de cubrimientos marginales
+
+            if i < d2.shape[0]-1: 
+                r_d2=d2[i-1]/d2[i] #ratio de 2as dif
+
+            if r_d > u[0] and c[0]==1:
+                pts[i]+=1
+                
+            if r_l > u[1] and c[1]==1:
+                pts[i]+=1
+
+            if d[i-1]> u[2] and c[2]==1:
+                pts[i]+=1
+
+            if p_n > u[3] and c[3]==1: 
+                pts[i]+=1
+            
+            if p_e_m > u[4] and c[4]==1: 
+                pts[i]+=1
+
+            #condicion sobre valores restantes de la 2a dif
+            if i < d2.shape[0]-1 and min(d2[i:]) > u[5] and c[5]==1: 
+                pts[i]+=1
+            
+            if r_e > u[6] and c[6]==1: pts[i]+=1
+            
+            if i < d2.shape[0]-1 and abs(r_d2) > u[7] and c[7]==1: 
+                pts[i]+=1
+                
+            #ratio de 1a dif actual respecto a max de dif restantes
+            if d[i-1]/max(d[i:]) > u[8] and c[8]==1: 
+                pts[i]+=1
+                
+            #ratio de 2a dif actual respecto a min de 2as dif restantes
+            if i < d2.shape[0]-1 and d2[i-1]/min(d2[i:]) >u[9] and c[9]==1:
+                pts[i]+=1
+        
+        return np.argmax(pts)+1
+
+    
+
+
 def conds_score(gci_,id,u,p=None,c=None):
     
     if "nan"==str(id):
@@ -296,7 +465,7 @@ def conds_score(gci_,id,u,p=None,c=None):
             r_l=(gci_[i]-gci_[i-1])/gci_[i-1] #ratio relativo
             p_n=sum(d2[:i]<0)/i #proporción de 2as dif negativas hasta k
             p_e_m=sum(p_e[:i]>=p_e[i-1])/i #prop de cubrimientos marginales anteriores mayores que el actual
-            r_e=p_e[i]/p_e[i-1] #ratio de cubrimientos marginales
+            r_e=p_e[i-1]/p_e[i] #ratio de cubrimientos marginales
 
             if i < d2.shape[0]-1: 
                 r_d2=d2[i-1]/d2[i] #ratio de 2as dif
@@ -341,7 +510,7 @@ def conds_score(gci_,id,u,p=None,c=None):
             r_l=(gci_[i]-gci_[i-1])/gci_[i-1] #ratio relativo
             p_n=sum(d2[:i]<0)/i #proporción de 2as dif negativas hasta k
             p_e_m=sum(p_e[:i]>=p_e[i-1])/i #prop de cubrimientos marginales anteriores mayores que el actual
-            r_e=p_e[i]/p_e[i-1] #ratio de cubrimientos marginales
+            r_e=p_e[i-1]/p_e[i] #ratio de cubrimientos marginales
 
             if i < d2.shape[0]-1: 
                 r_d2=d2[i-1]/d2[i] #ratio de 2as dif
@@ -386,7 +555,7 @@ def conds_score(gci_,id,u,p=None,c=None):
             r_l=(gci_[i]-gci_[i-1])/gci_[i-1] #ratio relativo
             p_n=sum(d2[:i]<0)/i #proporción de 2as dif negativas hasta k
             p_e_m=sum(p_e[:i]>=p_e[i-1])/i #prop de cubrimientos marginales anteriores mayores que el actual
-            r_e=p_e[i]/p_e[i-1] #ratio de cubrimientos marginales
+            r_e=p_e[i-1]/p_e[i] #ratio de cubrimientos marginales
 
             if i < d2.shape[0]-1: 
                 r_d2=d2[i-1]/d2[i] #ratio de 2as dif
@@ -424,5 +593,4 @@ def conds_score(gci_,id,u,p=None,c=None):
                 pts[i]+=1
 
     return np.argmax(pts)+1
-
 
