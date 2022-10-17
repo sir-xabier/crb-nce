@@ -194,8 +194,25 @@ def generate_train_data(root,orness=0.5,dim=2,k_low=1,k_high=10,n_samples=500,n_
     
     print('Test datasets have been saved in a .npy files at:' + root +'\nTime taken: '+str(time_diff))
 
+def argmax_(row,m,TOL=10**-4):
+    if m==1:
+        return 0
+    ind=np.argpartition(row, -m)[-m:]
+    ind=ind[np.argsort(row[ind])]
+    count=0
+
+    for i in range(1,m):
+        if abs(row[ind[0]]-row[ind[i]])<TOL:
+            count+=1 
+        else:
+            if count>0:
+                return ind[np.random.randint(count)]
+            break
+
+    return ind[0]
+
 if __name__ == "__main__":
-    ROOT= os.path.abspath(os.path.join(os.getcwd(), os.pardir))
+    ROOT= os.path.join(os.getcwd(), os.pardir)[:-3]
 
     for orness in np.arange(10,50,5):
         """
@@ -222,7 +239,7 @@ if __name__ == "__main__":
     KMeans:{'max_iter':maxiter,'n_init':1,'random_state':seed},
     KMedoids:{'max_iter':maxiter,'init':'k-medoids++'},
     AgglomerativeClustering:{},
-    cmeans:{'m':2,'maxiter':maxiter, 'error': 10**-6,'seed': seed}}
+    cmeans:{'m':1.5,'maxiter':maxiter, 'error': 10**-6,'seed': seed}}
     
 
     #K-means ++ init
@@ -238,6 +255,9 @@ if __name__ == "__main__":
     ch=np.zeros((N,len(K)+1))
     db=np.zeros((N,len(K)+1))
     gci=np.zeros((N,len(K)+1))
+    gci_02=np.zeros((N,len(K)+1))
+    gci_035=np.zeros((N,len(K)+1))
+    acc=np.zeros(N,dtype=float)
 
     nclases_pred_gci=np.zeros(N,dtype=int)
     nclases_pred_gci=np.zeros(N,dtype=int)
@@ -255,7 +275,8 @@ if __name__ == "__main__":
         X = np.array(dataset[0])
         
         y_= np.array(dataset[1])
-        
+        if y_[0] is None:
+            y_=np.zeros()sadasd
         true_k= np.unique(y_).shape[0]
         
         X = StandardScaler().fit_transform(X)
@@ -274,15 +295,14 @@ if __name__ == "__main__":
             y[index]=true_k
 
             for k in K:
+                y_best_sol=None
 
                 if clf.__name__ == "AgglomerativeClustering":
                     clf_=clf(n_clusters=k,**args)
-                    y_pred=clf_.fit_predict(X)
-                    centroides=np.array([np.mean(X[y_pred==i],axis=0) for i in np.unique(np.arange(k))])
-  
+                    y_best_sol=clf_.fit_predict(X)
+                    centroides=np.array([np.mean(X[y_best_sol==i],axis=0) for i in np.unique(np.arange(k))])
                 else:
                     best_sol_err=np.inf
-                    y_best_sol=None
 
                     for i in range(0,n_init):
                         if i_a==0:
@@ -292,9 +312,15 @@ if __name__ == "__main__":
                             c0= initial_centers[(k-1)*n_init + i]
 
                         if clf.__name__ == "cmeans":
-                            _,u_orig, _, _, this_err, nit, _ =clf(data=X.T,c=k,c0=c0,**args)
-                            this_err=this_err[-1]
-                            y_pred=  u_orig.T.argmax(axis=1).reshape(1,-1)[0]
+                            _,u_orig, _, _, this_err, _, _ =clf(data=X.T,c=k,c0=c0,**args)
+                            
+                            y_pred= np.apply_along_axis(argmax_,axis=1,arr=u_orig.T,m=k,TOL=10**-4)
+
+                            if len(np.unique(y_pred))!=k:
+                                this_err=np.inf
+                            else:
+                                this_err=this_err[-1]
+
                         else:
                             if clf.__name__ == "KMeans":
                                 clf_=clf(n_clusters=k,init=c0,**args)
@@ -307,17 +333,28 @@ if __name__ == "__main__":
                         if this_err<best_sol_err:
                             best_sol_err=this_err
                             y_best_sol=y_pred
-                centroides=np.array([np.mean(X[y_best_sol==i],axis=0) for i in np.unique(np.arange(k))])
-            
-                U=coverings(X,centroides,distance_normalizer=distance_normalizer)
-                s[index,k]=silhouette_score2(X,y_best_sol)
-                ch[index,k]=calinski_harabasz_score2(X,y_best_sol)
-                db[index,k]=davies_bouldin_score2(X,y_best_sol)
-                gci[index,k]=global_covering_index(U,function='mean')
+
+                if y_best_sol is not None:
+                        
+                    centroides=np.array([np.mean(X[y_best_sol==i],axis=0) for i in np.unique(np.arange(k))])
+                
+                    U=coverings(X,centroides,distance_normalizer=distance_normalizer)
+                    s[index,k]=silhouette_score2(X,y_best_sol)
+                    ch[index,k]=calinski_harabasz_score2(X,y_best_sol)
+                    db[index,k]=davies_bouldin_score2(X,y_best_sol)
+                    gci[index,k]=global_covering_index(U,function='mean')
+                    #gci_035[index,k]=global_covering_index(U,function='OWA',orness=0.35)
+                    #gci_02[index,k]=global_covering_index(U,function='OWA',orness=0.2)
+
+                    if k==true_k:
+                        acc[index]= np.sum(y_best_sol==y_)/len(y_)
 
     pd.DataFrame(y).to_csv(ROOT+"/data/test/y_.csv")
-    pd.DataFrame(s,index=names).to_csv(ROOT+"/data/test/shilhouette_1.csv")
-    pd.DataFrame(ch,index=names).to_csv(ROOT+"/data/test/calinski_harabasz_1.csv")
-    pd.DataFrame(db,index=names).to_csv(ROOT+"/data/test/davies_boulding_1.csv")
-    pd.DataFrame(gci,index=names).to_csv(ROOT+"/data/test/gci_1.csv")
+    pd.DataFrame(s,index=names).to_csv(ROOT+"/data/test/shilhouette.csv")
+    pd.DataFrame(ch,index=names).to_csv(ROOT+"/data/test/calinski_harabasz.csv")
+    pd.DataFrame(db,index=names).to_csv(ROOT+"/data/test/davies_boulding.csv")
+    pd.DataFrame(gci,index=names).to_csv(ROOT+"/data/test/gci.csv")
+    pd.DataFrame(gci,index=names).to_csv(ROOT+"/data/test/gci_02.csv")
+    pd.DataFrame(gci,index=names).to_csv(ROOT+"/data/test/gci_035.csv")
+    pd.DataFrame(acc,index=names).to_csv(ROOT+"/data/test/acc.csv")
 
