@@ -3,6 +3,8 @@ import numpy as np
 import pandas as pd
 import time
 import os
+import csv
+
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 from Functions import global_covering_index,coverings
@@ -212,7 +214,7 @@ def argmax_(row,m,TOL=10**-4):
     return ind[0]
 
 if __name__ == "__main__":
-    ROOT= os.path.join(os.getcwd(), os.pardir)[:-3]
+    ROOT= "C:/Users/sirxa/Desktop"
 
     for orness in np.arange(10,50,5):
         """
@@ -248,53 +250,60 @@ if __name__ == "__main__":
     #SpectralClustering: {'assign_labels':'discretize'}
 
     N=len(ds_dic)*len(classifiers)
-    K=range(1,30+1)
+    K=range(1,35+1)
 
     #Índices   
     s=np.zeros((N,len(K)+1))
     ch=np.zeros((N,len(K)+1))
     db=np.zeros((N,len(K)+1))
     gci=np.zeros((N,len(K)+1))
-    gci_02=np.zeros((N,len(K)+1))
-    gci_035=np.zeros((N,len(K)+1))
     acc=np.zeros(N,dtype=float)
 
-    nclases_pred_gci=np.zeros(N,dtype=int)
     nclases_pred_gci=np.zeros(N,dtype=int)
     nclases_pred_s=np.zeros(N,dtype=int)
     nclases_pred_ch=np.zeros(N,dtype=int)
     nclases_pred_db=np.zeros(N,dtype=int)
     y=np.zeros(N,dtype=int)
 
-    names=np.zeros(N,dtype=str).tolist()
+    names=[]
+    #np.zeros(N,dtype=str).tolist()
 
     start_time=time.time()
+    
+    if os.path.exists(ROOT+"/data/test/y.csv"):
+        start_id=len(pd.read_csv(ROOT+"/data/test/y.csv").values.tolist())
+    else:
+        start_id=0
 
     for i_d, (name,dataset) in tq.tqdm(enumerate(ds_dic.items())):
-        
+
+        if i_d<start_id:
+            continue
         X = np.array(dataset[0])
         
         y_= np.array(dataset[1])
-        if y_[0] is None:
-            y_=np.zeros()sadasd
+        if y_.tolist() is None:
+            y_=np.zeros(X.shape[0])
         true_k= np.unique(y_).shape[0]
         
         X = StandardScaler().fit_transform(X)
         distance_normalizer=1/np.sqrt(25*X.shape[1])
+
         
         initial_centers=[]
 
         for i_a,dic in enumerate(classifiers.items()):
+
             index=i_d*len(classifiers) + i_a
             
             clf=dic[0]
             args=dic[1]
-            
-            names[index]= name+ "-"+ clf.__name__ 
-            
+            names.append(name+ "-"+ clf.__name__)
+
             y[index]=true_k
 
-            for k in K:
+            for k in K: 
+ 
                 y_best_sol=None
 
                 if clf.__name__ == "AgglomerativeClustering":
@@ -343,18 +352,47 @@ if __name__ == "__main__":
                     ch[index,k]=calinski_harabasz_score2(X,y_best_sol)
                     db[index,k]=davies_bouldin_score2(X,y_best_sol)
                     gci[index,k]=global_covering_index(U,function='mean')
-                    #gci_035[index,k]=global_covering_index(U,function='OWA',orness=0.35)
-                    #gci_02[index,k]=global_covering_index(U,function='OWA',orness=0.2)
 
                     if k==true_k:
                         acc[index]= np.sum(y_best_sol==y_)/len(y_)
 
-    pd.DataFrame(y).to_csv(ROOT+"/data/test/y_.csv")
-    pd.DataFrame(s,index=names).to_csv(ROOT+"/data/test/shilhouette.csv")
-    pd.DataFrame(ch,index=names).to_csv(ROOT+"/data/test/calinski_harabasz.csv")
-    pd.DataFrame(db,index=names).to_csv(ROOT+"/data/test/davies_boulding.csv")
-    pd.DataFrame(gci,index=names).to_csv(ROOT+"/data/test/gci.csv")
-    pd.DataFrame(gci,index=names).to_csv(ROOT+"/data/test/gci_02.csv")
-    pd.DataFrame(gci,index=names).to_csv(ROOT+"/data/test/gci_035.csv")
-    pd.DataFrame(acc,index=names).to_csv(ROOT+"/data/test/acc.csv")
+            
+            with open(ROOT+"/data/test/y.csv",'a',newline='') as f:
+                writer_object = csv.writer(f)
+                writer_object.writerow([y[index]])
+                f.close()
 
+            with open(ROOT+"/data/test/shilhouette.csv",'a',newline='') as f:
+                writer_object = csv.writer(f)
+                writer_object.writerow(s[index,:].tolist())
+                f.close()
+
+            with open(ROOT+"/data/test/calinski_harabasz.csv",'a',newline='') as f:
+                writer_object = csv.writer(f)
+                writer_object.writerow(ch[index,:].tolist())
+                f.close()
+
+            with open(ROOT+"/data/test/davies_boulding.csv",'a',newline='') as f:
+                writer_object = csv.writer(f)
+                writer_object.writerow(db[index,:].tolist())
+                f.close()
+                
+            with open(ROOT+"/data/test/gci.csv",'a',newline='') as f:
+                writer_object = csv.writer(f)
+                writer_object.writerow(gci[index,:].tolist(),)
+                f.close()
+ 
+            with open(ROOT+"/data/test/acc.csv",'a',newline='') as f:
+                writer_object = csv.writer(f)
+                writer_object.writerow([acc[index]])
+                f.close()
+
+    with open(ROOT+"/data/test/names.txt", "w") as txt_file:
+        for line in names:
+            txt_file.write(line + "\n")
+
+    df_s= pd.read_csv(ROOT+"/data/test/shilhouette.csv",header=None).set_index(names).drop(columns=0).to_csv(ROOT+"/data/test/shilhouette.csv")
+    df_ch= pd.read_csv(ROOT+"/data/test/calinski_harabasz.csv",header=None).drop(columns=0).set_index(names).to_csv(ROOT+"/data/test/calinski_harabasz.csv")
+    df_db= pd.read_csv(ROOT+"/data/test/davies_boulding.csv",header=None).drop(columns=0).set_index(names).to_csv(ROOT+"/data/test/davies_boulding.csv")
+    df_gci= pd.read_csv(ROOT+"/data/test/gci.csv",header=None).drop(columns=0).set_index(names).to_csv(ROOT+"/data/test/gci.csv")
+    df_y= pd.read_csv(ROOT+"/data/test/y.csv",header=None).to_csv(ROOT+"/data/test/y.csv")

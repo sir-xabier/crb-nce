@@ -289,7 +289,7 @@ def conds_score2(gci_,id,u,p=None,c=None,b=None):
 
     if p is None and c is None:
         pts[0]=9-(b[0]*1+b[1]*2)
-        for i in range(1,d.shape[0]):
+        for i in range(2,d.shape[0]):
             pts[i]=i/d.shape[0] #fracción creciente
             
             r_d=d[i-1]/d[i] #condición sobre ratio de diferencias
@@ -337,7 +337,7 @@ def conds_score2(gci_,id,u,p=None,c=None,b=None):
     
     elif p is not None:
         pts[0]=1
-        for i in range(1,d.shape[0]):
+        for i in range(2,d.shape[0]):
                         
             r_d=d[i-1]/d[i] #condición sobre ratio de diferencias
             r_l=(gci_[i]-gci_[i-1])/gci_[i-1] #ratio relativo
@@ -394,7 +394,7 @@ def conds_score2(gci_,id,u,p=None,c=None,b=None):
     
     elif c is not None:
         pts[0]=np.amax([np.sum(c)-(b[0]*1+b[1]*2),1])
-        for i in range(1,d.shape[0]):
+        for i in range(2,d.shape[0]):
             pts[i]=i/d.shape[0] #fracción creciente
             
             r_d=d[i-1]/d[i] #condición sobre ratio de diferencias
