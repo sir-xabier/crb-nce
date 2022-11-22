@@ -21,22 +21,27 @@ from matplotlib import pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
 #Data
-ROOT= os.path.abspath(os.path.join(os.getcwd(), os.pardir))
+ROOT= os.getcwd().replace("\\","/")
 
 with open(ROOT+"/data/test/names.txt", "r") as txt_file:  
       names=np.array(txt_file.read().replace('\n', ' ').split(" "))[:-1]
       txt_file.close()
  
-
+with open(ROOT+'/data/test/test_data.json') as json_file:
+        ds_dic = json.loads(json.load(json_file))
+        print(len(ds_dic))
+        
 df_s= pd.read_csv(ROOT+"/data/test/shilhouette.csv",index_col=None).drop(columns=["Unnamed: 0"])
 df_ch= pd.read_csv(ROOT+"/data/test/calinski_harabasz.csv",index_col=None).drop(columns=["Unnamed: 0"])
 df_db= pd.read_csv(ROOT+"/data/test/davies_boulding.csv",index_col=None).drop(columns=["Unnamed: 0"])
 df_gci= pd.read_csv(ROOT+"/data/test/gci.csv",index_col=None).drop(columns=["Unnamed: 0"])
-y= pd.read_csv(ROOT+"/data/test/y.csv",header=None).values
+y= pd.read_csv(ROOT+"/data/test/y.csv",header=None).values[1:,-1].astype(int).reshape(-1,1)
 acc=pd.read_csv(ROOT+"/data/test/acc.csv",header=None).values
+y.shape
+acc.shape
 
-all_df={"s":df_s,"ch":df_ch,"db":df_db,"gci":df_gci,"acc":acc,"true_y":y}
-df=pd.DataFrame(columns=["s","ch","db","gci","acc","true_y"],index=names)
+all_df={"s":df_s,"ch":df_ch,"db":df_db,"gci":df_gci,"true_y":y}
+df=pd.DataFrame(columns=["s","ch","db","gci","true_y"],index=names)
 
 for name,df_ in all_df.items():
     if name!="acc" and name!="true_y":
@@ -52,8 +57,12 @@ df["seed"]=df.apply(lambda x: "Control" if "blobs-" not in x.name else x.name.sp
 df["dimensions"]=df.apply(lambda x: "Control" if "blobs-" not in x.name else x.dataset.split("-")[-3],axis=1)
 df["N"]=df.apply(lambda x: "Control" if "blobs-" not in x.name else x.dataset.split("-")[-1],axis=1)
 df["scenario"]=df.apply(lambda x: "Control" if "blobs-" not in x.name else x.dimensions + "-" + x.N, axis=1)
-df[df["algorithm"]!="cmeans"]
-df[df["true_y"]!=1]
+df=df[df["algorithm"]!="cmeans"]
+
+df["acc"]=acc
+df=df[df["true_y"]!=1]
+df=df[df["true_y"]!=0]
+
 
 df["acc"].hist()
 plt.show()
@@ -64,21 +73,21 @@ def get_cmap(n, name='hsv'):
     return plt.cm.get_cmap(name, n)
 
  
-data=df[["gci","acc","true_y"]].groupby(['true_y'])
+data=df[["gci","acc","true_y","algorithm"]].groupby(['algorithm'])
 
 cmap = get_cmap(1*len(np.unique(df["true_y"])))
 
+   
 fig = plt.figure(figsize=(12, 9))
-ax = Axes3D(fig)
-ax = plt.subplot()
+ax = fig.add_subplot(projection='3d')
+
 for i,pack in enumerate(data):
     key, grp=pack[0],pack[1]
-    ax.scatter(grp.iloc[:,0],grp.iloc[:,1], label=key,c=cmap(i))  # if you want to do everything in one line, lol
+    ax.scatter(xs=grp.iloc[:,0],ys=grp.iloc[:,1],zs=grp.iloc[:,2],label=key,c=cmap(i))  # if you want to do everything in one line, lol
 
 ax.set_xlabel('X-gci', linespacing=3.2)
 ax.set_ylabel('Y-acc', linespacing=3.1)
-#ax.set_zlabel('Z', linespacing=3.4)
+ax.set_zlabel('Z-true_y', linespacing=3.4)
 
 plt.legend(loc='best')
 plt.show()
- 
