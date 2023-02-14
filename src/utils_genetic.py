@@ -9,7 +9,7 @@ from deap import tools
 
 root_path=os.getcwd()
 
-sufijo="20blobs10_K35_S200"#"20blobs20_K35_S100"#
+sufijo="20blobs15K35S200v2" #"20blobs20_K35_S100"# "20blobs10_K35_S200"
 
 gci= np.load(root_path+"/data/train/global_gci_"+sufijo+".npy",allow_pickle=True)
 #s_c= np.load(root_path+"/data/train/global_sin_cubrir_"+sufijo+".npy",allow_pickle=True)

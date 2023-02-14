@@ -1,29 +1,27 @@
+# Basic modules
+import os
+import time
+import json
+import tqdm.notebook as tq
+
+# Data modules
 from sklearn import datasets
 import numpy as np
 import pandas as pd
-import time
-import os
 import csv
 
-from sklearn.cluster import KMeans
+# Clustering modules
+from scipy.spatial import distance
 from sklearn.preprocessing import StandardScaler
-from Functions import global_covering_index,coverings
-import json
-import numpy as np
-
-from tqdm import tqdm
-import tqdm.notebook as tq
-from sklearn.cluster import KMeans,SpectralClustering,AgglomerativeClustering
-from cmeans import cmeans
+from sklearn.cluster import KMeans, AgglomerativeClustering
 from sklearn_extra.cluster import KMedoids
 from sklearn.cluster import kmeans_plusplus
 
-from sklearn.preprocessing import StandardScaler
+# Cluster index modules 
+from utils import global_covering_index, coverings
+from utils import silhouette_score, calinski_harabasz_score, davies_bouldin_score
 
-from Functions import coverings, global_covering_index
-from Functions import silhouette_score2, calinski_harabasz_score2, davies_bouldin_score2,conds_score
-import warnings
-warnings.filterwarnings("ignore")
+
 
 class NumpyEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -38,7 +36,8 @@ def get_dataframe_from_dat(file):
             y=row[-1]
             yield list(map(float, row[:-1]))+ [y[:-1]]
 
-def generate_blobs(n_blobs=10,k_low=1,k_high=10,dim=2,n_samples=500,initial_seed=1,get_class=False,inter=1):
+def generate_blobs(n_blobs=10,k_low=1,k_high=10,dim=2,n_samples=500,initial_seed=1,
+                   get_class=False,inter=1):
 
     data=[]
     n_clases=[]
@@ -57,32 +56,101 @@ def generate_blobs(n_blobs=10,k_low=1,k_high=10,dim=2,n_samples=500,initial_seed
         return data,names,n_clases
     else: 
         return names,data
+str()
+
+def generate_scenario(n_blobs=10,kl=1,ku=1,pl=2,pu=2,sl=1,su=1,N=500,
+                      initial_seed=0,get_class=True):
+    data=[]
+    n_clases=[]
+    names=[]
+    if su==0.5: 
+        iter_s=[0.3,0.32,0.34,0.36,0.38,0.4,0.425,0.45,0.475,0.5]
+    elif sl==1 and su==1:
+        iter_s=[1 for i in range(n_blobs)]
+    else:
+        iter_s=np.arange(sl,su,(su-sl)/n_blobs)
+    for i,dt in enumerate(iter_s):
+        K=rng.integers(kl,ku,endpoint=True)
+        P=rng.integers(pl,pu,endpoint=True)
+        centros=np.zeros(shape=(K,P))
+        for k in range(K):
+            centro=rng.integers(1,K,endpoint=True,size=(1,P))
+            if k == 0:
+                centros[k,:]=centro
+            else:
+                igual=True
+                while igual:
+                    if np.any(np.all(centros==np.repeat(centro,K,axis=0),axis=1)):
+                        centro=rng.integers(1,K,endpoint=True,size=(1,P))
+                    else:
+                        centros[k,:]=centro
+                        igual=False
+                
+        centros=centros-0.5
+        r=np.amin(distance.cdist(centros,centros)+np.identity(K)*K*np.sqrt(P))
+        blobs=datasets.make_blobs(n_samples=N,centers=centros,cluster_std=r*dt,
+                                  random_state=initial_seed+i)
+        data.append(blobs) if get_class else data.append(blobs[0])
+        names.append('blobs-P'+str(P)+'-K'+str(K)+'-N'+str(N)+'-dt'+format(dt,"g")+'-S'+str(i))
+        n_clases.append(K)
+    
+    if not get_class:
+        return data,names,n_clases
+    else: 
+        return names,data
 
 
-def generate_test_data(root,n_samples=500,random_state=131416):
+
+
+def generate_test_data(root,n_samples=500,random_state=131416,initial_seed=0,
+                       n_blobs=10):
     ds_dic={}    
     start=time.time()
-    path=root+"/data/test/test_data.json"
+    path=root+"/data/test/test_data3.json"
 
     #Otros
-    ds_dic["circles"] = datasets.make_circles(n_samples=n_samples, factor=0.5, noise=0.05)
-    ds_dic["moons"] = datasets.make_moons(n_samples=n_samples, noise=0.05)
-    ds_dic["no_structure"] = np.random.rand(n_samples, 2), None
+    ds_dic["circles"] = {'Scenario':"Control",
+                         'Value':datasets.make_circles(n_samples=n_samples, 
+                                                       factor=0.5, noise=0.05)
+                         }
+    ds_dic["moons"] = {'Scenario':"Control",
+                       'Value':datasets.make_moons(n_samples=n_samples, noise=0.05)
+                       }
+    ds_dic["no_structure"] = {'Scenario':"Control",
+                              'Value':(np.random.rand(n_samples, 2), None)
+                              }
     
     transformation = [[0.6, -0.6], [-0.4, 0.8]]
     X, y = datasets.make_blobs(n_samples=n_samples, random_state=random_state)
-    ds_dic["aniso"] = (np.dot(X, transformation),y)
-    ds_dic["varied"] = datasets.make_blobs(
-        n_samples=n_samples, cluster_std=[1.0, 2.5, 0.5], random_state=random_state
-    )
-    ds_dic["blobs_3"] = datasets.make_blobs(n_samples=n_samples, random_state=random_state)
+    ds_dic["aniso"] = {'Scenario':"Control",
+                       'Value':(np.dot(X, transformation),y)
+                       }
+    ds_dic["varied"] = {'Scenario':"Control",
+                        'Value':datasets.make_blobs(n_samples=n_samples, 
+                                                    cluster_std=[1.0, 2.5, 0.5], 
+                                                    random_state=random_state)
+                        }
+    '''
+    ds_dic["blobs_3"] = {'Scenario':"Control",
+                         'Value':datasets.make_blobs(n_samples=n_samples, 
+                                                     random_state=random_state)
+                         }
+    '''
     
     #2. Datasets reales
     #Scikit
-    ds_dic["iris"] = datasets.load_iris(return_X_y=True)
-    ds_dic["digits"] = datasets.load_digits(return_X_y=True)
-    ds_dic["wine"] = datasets.load_wine(return_X_y=True)
-    ds_dic["bcancer"] = datasets.load_breast_cancer(return_X_y=True)
+    ds_dic["iris"] = {'Scenario':"Control",
+                      'Value':datasets.load_iris(return_X_y=True)
+                      }
+    ds_dic["digits"] = {'Scenario':"Control",
+                        'Value':datasets.load_digits(return_X_y=True)
+                        }
+    ds_dic["wine"] = {'Scenario':"Control",
+                      'Value':datasets.load_wine(return_X_y=True)
+                      }
+    ds_dic["bcancer"] = {'Scenario':"Control",
+                         'Value':datasets.load_breast_cancer(return_X_y=True)
+                         }
     
     #Keels
     dataset_path= root+"/data/datasets/"
@@ -90,45 +158,29 @@ def generate_test_data(root,n_samples=500,random_state=131416):
     for file in os.listdir(dataset_path):   
         generator=get_dataframe_from_dat(dataset_path+file)
         df= pd.DataFrame(generator).values
-        ds_dic[file]=(df[:,:-1],pd.factorize(df[:,-1])[0] + 1)
+        ds_dic[file]={'Scenario':"Control",
+                      'Value':(df[:,:-1],pd.factorize(df[:,-1])[0] + 1)
+                      }
 
-    #1. Datasets artificiales
-    #Blobs
+    
+    #Escenarios nuevos, se leen las configuraciones de Escenarios.csv
+    
+    dataset_path= root+"/data/test/Escenarios.csv"
+    scenarios = pd.read_csv(dataset_path)
 
-        #Escenario 3: p=2 | k=1-10 | n=500  
-    blobs_=generate_blobs(dim=2,k_low=1,k_high=10,n_samples=500,n_blobs=10,initial_seed=20,get_class=True)
-
-    for i,key in enumerate(blobs_[0]):
-        value= blobs_[1][i]
-        ds_dic[key]=value
-
-        #Escenario 2: p=10 | k=1-10 | n=500  
-    blobs_=generate_blobs(dim=10,k_low=1,k_high=10,n_samples=500,n_blobs=10,initial_seed=1,get_class=True)
-
-    for i,key in enumerate(blobs_[0]):
-        value= blobs_[1][i]
-        ds_dic[key]=value
-
-        #Escenario 3: : p=50 | k=1-10 | n=500  
-    blobs_=generate_blobs(dim=50,k_low=1,k_high=10,n_samples=500,n_blobs=10,initial_seed=1,get_class=True)
-
-    for i,key in enumerate(blobs_[0]):
-        value= blobs_[1][i]
-        ds_dic[key]=value
-
-        #Escenario 4: p=2 | k=5-25 | n=1250    
-    blobs_=generate_blobs(dim=2,k_low=5,k_high=25,n_samples=1250,n_blobs=5,initial_seed=1,get_class=True,inter=5)
-
-    for i,key in enumerate(blobs_[0]):
-        value= blobs_[1][i]
-        ds_dic[key]=value
-
-        #Escenario 5: p=50 | k=5-25 | n=10000    
-    blobs_=generate_blobs(dim=50,k_low=5,k_high=25,n_samples=10000,n_blobs=5,initial_seed=1,get_class=True,inter=5)
-
-    for i,key in enumerate(blobs_[0]):
-        value= blobs_[1][i]
-        ds_dic[key]=value
+    for j,row in enumerate(scenarios.iterrows()):
+        blobs_=generate_scenario(n_blobs=n_blobs,
+                                 kl=row[1]['kl'],ku=row[1]['ku'],
+                                 pl=row[1]['pl'],pu=row[1]['pu'],
+                                 sl=row[1]['sl'],su=row[1]['su'],
+                                 N=row[1]['n'],
+                                 initial_seed=initial_seed+j*n_blobs)
+        
+        for i,key in enumerate(blobs_[0]):
+            value= blobs_[1][i]
+            ds_dic[key]={'Scenario':row[1]['Scenario'],
+                         'Value':value
+                         }
     
     json_string=json.dumps(ds_dic, cls=NumpyEncoder)
     with open(path, 'w') as outfile:
@@ -161,12 +213,13 @@ def generate_train_data(root,orness=0.5,dim=2,k_low=1,k_high=10,n_samples=500,n_
                 _=clf_.fit_predict(X)
                 centroides=clf_.cluster_centers_
                 U=coverings(X,centroides,distance_normalizer=distance_normalizer)
-                
+                path=ROOT + "/data/weights/DG/" + str(n) + "/W_" + str(n) + "_" + str(orn) + ".npy"  
+
                 if orness/100==0.5: 
-                    gci[i_d,k-1]=global_covering_index(U,function='mean')
+                    gci[i_d,k-1]=global_covering_index(U,function='mean',path=path)
                 else:
-                    gci[i_d,k]=global_covering_index(U,function='OWA',orness=orness/100) # El orness va del 10 al 45
-    
+                    gci[i_d,k]=global_covering_index(U,function='OWA',orness=orness/100,path=path) # El orness va del 10 al 45
+
     time_diff=time.time() - start_time                    
     
     if not val:
@@ -214,25 +267,27 @@ def argmax_(row,m,TOL=10**-4):
     return ind[0]
 
 if __name__ == "__main__":
-    ROOT= "C:/Users/sirxa/Desktop"
-
+    
+    ROOT=os.getcwd()
+    
+    rng = np.random.default_rng(1)
+    
+    """
     for orness in np.arange(10,50,5):
-        """
+        
         generate_train_data(orness=orness,root=ROOT+'/data/train/',dim=2,k_low=1,k_high=25,n_samples=500,n_blobs=10,initial_seed=1,val=True)
         generate_train_data(orness=orness,root=ROOT+'/data/train/',dim=2,k_low=1,k_high=25,n_samples=500,n_blobs=10,initial_seed=10,val=False)
-        """
+        
         pass
     
+    ds_dic=generate_test_data(n_samples=500,random_state=131416,root=ROOT,
+                              initial_seed=500,n_blobs=10)
     """
-    ds_dic=generate_test_data(n_samples=500,random_state=131416,root=ROOT)
     
-    """
-    with open(ROOT+'/data/test/test_data.json') as json_file:
+    with open(ROOT+'/data/test/experiment_data.json') as json_file:
         ds_dic = json.loads(json.load(json_file))
     
-
     #Classifiers 
-    
     seed=31416
     n_init=10
     maxiter=100
@@ -240,24 +295,24 @@ if __name__ == "__main__":
     classifiers = {
     KMeans:{'max_iter':maxiter,'n_init':1,'random_state':seed},
     KMedoids:{'max_iter':maxiter,'init':'k-medoids++'},
-    AgglomerativeClustering:{},
-    cmeans:{'m':1.5,'maxiter':maxiter, 'error': 10**-6,'seed': seed}}
-    
+    AgglomerativeClustering:{}
+    }
 
     #K-means ++ init
     kmeans_pp=lambda X,c,s: kmeans_plusplus(X, n_clusters=c, random_state=s)[0] 
 
-    #SpectralClustering: {'assign_labels':'discretize'}
-
     N=len(ds_dic)*len(classifiers)
     K=range(1,35+1)
+    orness=[0.1, 0.2, 0.3, 0.35, 0.4, 0.45, 0.5]
+    O=len(orness)
 
     #Índices   
     s=np.zeros((N,len(K)+1))
     ch=np.zeros((N,len(K)+1))
     db=np.zeros((N,len(K)+1))
-    gci=np.zeros((N,len(K)+1))
+    gci=np.zeros((O,N,len(K)+1))
     acc=np.zeros(N,dtype=float)
+    
 
     nclases_pred_gci=np.zeros(N,dtype=int)
     nclases_pred_s=np.zeros(N,dtype=int)
@@ -266,7 +321,7 @@ if __name__ == "__main__":
     y=np.zeros(N,dtype=int)
 
     names=[]
-    #np.zeros(N,dtype=str).tolist()
+    scenarios=[]
 
     start_time=time.time()
     
@@ -275,13 +330,16 @@ if __name__ == "__main__":
     else:
         start_id=0
 
-    for i_d, (name,dataset) in tq.tqdm(enumerate(ds_dic.items())):
+    for i_d, (name,item) in tq.tqdm(enumerate(ds_dic.items())):
+        
+        print("Comenzando dataset "+name)
 
         if i_d<start_id:
             continue
-        X = np.array(dataset[0])
+        X = np.array(item['Value'][0])
+        n=X.shape[0]
         
-        y_= np.array(dataset[1])
+        y_= np.array(item['Value'][1])
         if y_.tolist() is None:
             y_=np.zeros(X.shape[0])
         true_k= np.unique(y_).shape[0]
@@ -299,6 +357,7 @@ if __name__ == "__main__":
             clf=dic[0]
             args=dic[1]
             names.append(name+ "-"+ clf.__name__)
+            scenarios.append(item['Scenario'])
 
             y[index]=true_k
 
@@ -309,7 +368,7 @@ if __name__ == "__main__":
                 if clf.__name__ == "AgglomerativeClustering":
                     clf_=clf(n_clusters=k,**args)
                     y_best_sol=clf_.fit_predict(X)
-                    centroides=np.array([np.mean(X[y_best_sol==i],axis=0) for i in np.unique(np.arange(k))])
+#                    centroides=np.array([np.mean(X[y_best_sol==i],axis=0) for i in np.unique(np.arange(k))])
                 else:
                     best_sol_err=np.inf
 
@@ -348,13 +407,22 @@ if __name__ == "__main__":
                     centroides=np.array([np.mean(X[y_best_sol==i],axis=0) for i in np.unique(np.arange(k))])
                 
                     U=coverings(X,centroides,distance_normalizer=distance_normalizer)
-                    s[index,k]=silhouette_score2(X,y_best_sol)
-                    ch[index,k]=calinski_harabasz_score2(X,y_best_sol)
-                    db[index,k]=davies_bouldin_score2(X,y_best_sol)
-                    gci[index,k]=global_covering_index(U,function='mean')
+                    s[index,k]=silhouette_score(X,y_best_sol)
+                    ch[index,k]=calinski_harabasz_score(X,y_best_sol)
+                    db[index,k]=davies_bouldin_score(X,y_best_sol)
+                    
+                    for i_o, orn in enumerate(orness):
+                        path=ROOT + "/data/weights/DG/" + str(n) + "/W_" + str(n) + "_" + str(orn) + ".npy"  
+                        gci[i_o,index,k]=global_covering_index(U,function='OWA',orness=orn,path=path)
 
-                    if k==true_k:
-                        acc[index]= np.sum(y_best_sol==y_)/len(y_)
+#                    if k==true_k:
+#                        acc[index]= np.sum(y_best_sol==y_)/len(y_)
+                        
+                    namek=[names[index]+"_"+str(k)]
+                    with open(ROOT+"/data/test/yk.csv",'a',newline='') as f:
+                        writer_object = csv.writer(f)
+                        writer_object.writerow(namek+y_best_sol.tolist())
+                        f.close()
 
             
             with open(ROOT+"/data/test/y.csv",'a',newline='') as f:
@@ -376,11 +444,12 @@ if __name__ == "__main__":
                 writer_object = csv.writer(f)
                 writer_object.writerow(db[index,:].tolist())
                 f.close()
-                
-            with open(ROOT+"/data/test/gci.csv",'a',newline='') as f:
-                writer_object = csv.writer(f)
-                writer_object.writerow(gci[index,:].tolist(),)
-                f.close()
+            
+            for i_o, orn in enumerate(orness):    
+                with open(ROOT+"/data/test/gci_"+str(orn)+".csv",'a',newline='') as f:
+                    writer_object = csv.writer(f)
+                    writer_object.writerow(gci[i_o,index,:].tolist(),)
+                    f.close()
  
             with open(ROOT+"/data/test/acc.csv",'a',newline='') as f:
                 writer_object = csv.writer(f)
@@ -390,9 +459,17 @@ if __name__ == "__main__":
     with open(ROOT+"/data/test/names.txt", "w") as txt_file:
         for line in names:
             txt_file.write(line + "\n")
+            
+    with open(ROOT+"/data/test/scenarios.txt", "w") as txt_file:
+        for line in scenarios:
+            txt_file.write(line + "\n")
 
+    names=np.asarray(names)
+    
     df_s= pd.read_csv(ROOT+"/data/test/shilhouette.csv",header=None).set_index(names).drop(columns=0).to_csv(ROOT+"/data/test/shilhouette.csv")
     df_ch= pd.read_csv(ROOT+"/data/test/calinski_harabasz.csv",header=None).drop(columns=0).set_index(names).to_csv(ROOT+"/data/test/calinski_harabasz.csv")
     df_db= pd.read_csv(ROOT+"/data/test/davies_boulding.csv",header=None).drop(columns=0).set_index(names).to_csv(ROOT+"/data/test/davies_boulding.csv")
-    df_gci= pd.read_csv(ROOT+"/data/test/gci.csv",header=None).drop(columns=0).set_index(names).to_csv(ROOT+"/data/test/gci.csv")
+    for orn in orness:
+        df_gci= pd.read_csv(ROOT+"/data/test/gci_"+str(orn)+".csv",header=None).drop(columns=0).set_index(names).to_csv(ROOT+"/data/test/gci_"+str(orn)+".csv")
     df_y= pd.read_csv(ROOT+"/data/test/y.csv",header=None).to_csv(ROOT+"/data/test/y.csv")
+    

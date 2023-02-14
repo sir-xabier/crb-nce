@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 root_path=os.getcwd()
 
-sufijo="20blobs10_K35_S200"    #  # "20blobs20_K35_S100"
+sufijo="20blobs15K35S200v2"    #  # "20blobs20_K35_S100"
 
 gci= np.load(root_path+"/data/train/global_gci_"+sufijo+".npy",allow_pickle=True)
 #s_c= np.load(root_path+"/data/train/global_sin_cubrir_"+sufijo+".npy",allow_pickle=True)
@@ -63,7 +63,7 @@ if __name__=="__main__":
     
     experiment={
         'Criterio_ajustado':{'func':evalMAE_2,'mode':"partial",'den_err':den_err},
-        'Criterio_sencillo':{'func':evalMAE_3,'mode':"conds",'mu':0.,'den_err':den_err},
+        'Criterio_sencillo':{'func':evalMAE_3,'mode':"conds",'mu':1.,'den_err':den_err},
         'Criterio_simple':{'func':evalMAE_3,'mode':"conds",'mu':5,'den_err':den_err},
         'Criterio_complejo':{'func':evalMAE_1,'mode':"complete",'den_err':den_err}
         }
@@ -71,18 +71,18 @@ if __name__=="__main__":
     root_path=os.getcwd()
     iter = 1
     tolerance = 1
-    n_pop = 150
+    n_pop = 200
     CXPB=0.9
     MUTPB=0.2
-    GEN = 300
+    GEN = 500
     WARMUP=25 
-    MAX_RESTART=10
-    seed=1480 #111217
+    MAX_RESTART=17
+    seed=1480  # 111217  
     in_sols=[]
     #best_sol=np.load(root_path+"/data/genetic/best_solution_Criterio_ajustado_P50_G500_W50_M0.1_T5_R8_S31417.npy",allow_pickle=True)
     currentDateAndTime = datetime.now()
     
-    gen_pars="_ObjACC_P"+str(n_pop)+"_G"+str(GEN)+"_W"+str(WARMUP)+"_M"+str(MUTPB)+"_T"+str(tolerance)+"_R"+str(MAX_RESTART)+"_S"+str(seed)+"_D"+str(den_err)
+    gen_pars="_Acc_P"+str(n_pop)+"G"+str(GEN)+"W"+str(WARMUP)+"M"+str(MUTPB)+"T"+str(tolerance)+"R"+str(MAX_RESTART)+"S"+str(seed)+"D"+str(den_err)
     obs="_"+sufijo
 
     fig = plt.figure(figsize=(100, 100))
