@@ -20,7 +20,7 @@ from sklearn.cluster import kmeans_plusplus
 # Cluster index modules 
 from utils import global_covering_index, coverings
 from utils import silhouette_score, calinski_harabasz_score, davies_bouldin_score
-
+from utils import bic_fixed, sse, curvature_method, variance_last_reduction, xie_beni_ts
 
 
 class NumpyEncoder(json.JSONEncoder):
@@ -310,14 +310,53 @@ if __name__ == "__main__":
     s=np.zeros((N,len(K)+1))
     ch=np.zeros((N,len(K)+1))
     db=np.zeros((N,len(K)+1))
+    sse=np.zeros((N,len(K)+1))
+    bic=np.zeros((N,len(K)+1))
+    xb=np.zeros((N,len(K)+1))
+    cv=np.zeros((N,len(K)+1))
+    vlr=np.zeros((N,len(K)+1))
+
     gci=np.zeros((O,N,len(K)+1))
     acc=np.zeros(N,dtype=float)
-    
+        
+    # Input
+    data_file = ROOT+"/data/test/yk.csv"
 
+    # Delimiter
+    data_file_delimiter = ','
+
+    # The max column count a line in the file could have
+    largest_column_count = 0
+
+    # Loop the data lines
+    with open(data_file, 'r') as temp_f:
+        # Read the lines
+        lines = temp_f.readlines()
+
+        for l in lines:
+            # Count the column count for the current line
+            column_count = len(l.split(data_file_delimiter)) + 1
+            
+            # Set the new most column count
+            largest_column_count = column_count if largest_column_count < column_count else largest_column_count
+
+    # Generate column names (will be 0, 1, 2, ..., largest_column_count - 1)
+    column_names = [i for i in range(0, largest_column_count)]
+
+    # Read csv
+
+    yk = pd.read_csv(data_file, header=None, delimiter=data_file_delimiter, names=column_names)
+    
     nclases_pred_gci=np.zeros(N,dtype=int)
     nclases_pred_s=np.zeros(N,dtype=int)
     nclases_pred_ch=np.zeros(N,dtype=int)
     nclases_pred_db=np.zeros(N,dtype=int)
+    nclases_pred_xb=np.zeros(N,dtype=int)
+    nclases_pred_bic=np.zeros(N,dtype=int)
+    nclases_pred_cv=np.zeros(N,dtype=int)
+    nclases_pred_vlr=np.zeros(N,dtype=int)
+
+    
     y=np.zeros(N,dtype=int)
 
     names=[]
@@ -327,6 +366,8 @@ if __name__ == "__main__":
     
     if os.path.exists(ROOT+"/data/test/y.csv"):
         start_id=len(pd.read_csv(ROOT+"/data/test/y.csv").values.tolist())
+    
+    
     else:
         start_id=0
 
@@ -364,7 +405,8 @@ if __name__ == "__main__":
             for k in K: 
  
                 y_best_sol=None
-
+                """
+                
                 if clf.__name__ == "AgglomerativeClustering":
                     clf_=clf(n_clusters=k,**args)
                     y_best_sol=clf_.fit_predict(X)
@@ -401,29 +443,44 @@ if __name__ == "__main__":
                         if this_err<best_sol_err:
                             best_sol_err=this_err
                             y_best_sol=y_pred
-
+                """
                 if y_best_sol is not None:
                         
                     centroides=np.array([np.mean(X[y_best_sol==i],axis=0) for i in np.unique(np.arange(k))])
-                
+                    
+                    
                     U=coverings(X,centroides,distance_normalizer=distance_normalizer)
+                    """
                     s[index,k]=silhouette_score(X,y_best_sol)
                     ch[index,k]=calinski_harabasz_score(X,y_best_sol)
                     db[index,k]=davies_bouldin_score(X,y_best_sol)
+                    """
+
+                    vlr[index,k]=variance_last_reduction(X,y_best_sol, centroides, sse[index,:k])
+                    sse[index,k]=sse(X,y_best_sol, centroides)
+                    bic[index,k]=bic_fixed(X,y_best_sol)
+                    xb[index,k]=xie_beni_ts(X,y_best_sol, centroides)
+                    """
                     
                     for i_o, orn in enumerate(orness):
                         path=ROOT + "/data/weights/DG/" + str(n) + "/W_" + str(n) + "_" + str(orn) + ".npy"  
                         gci[i_o,index,k]=global_covering_index(U,function='OWA',orness=orn,path=path)
+                    """
 
 #                    if k==true_k:
-#                        acc[index]= np.sum(y_best_sol==y_)/len(y_)
+#                        acc[index]= np.su(y_best_sol==y_)/len(y_)
                         
                     namek=[names[index]+"_"+str(k)]
+                    """
+                    
                     with open(ROOT+"/data/test/yk.csv",'a',newline='') as f:
                         writer_object = csv.writer(f)
                         writer_object.writerow(namek+y_best_sol.tolist())
                         f.close()
+                    """
 
+            cv[index,k]=curvature_method(sse[index,:])
+            """
             
             with open(ROOT+"/data/test/y.csv",'a',newline='') as f:
                 writer_object = csv.writer(f)
@@ -455,6 +512,32 @@ if __name__ == "__main__":
                 writer_object = csv.writer(f)
                 writer_object.writerow([acc[index]])
                 f.close()
+            """
+            with open(ROOT+"/data/test/bic_fixed.csv",'a',newline='') as f:
+                writer_object = csv.writer(f)
+                writer_object.writerow(bic[index,:].tolist())
+                f.close()
+            
+            with open(ROOT+"/data/test/variance_last_reduction.csv",'a',newline='') as f:
+                writer_object = csv.writer(f)
+                writer_object.writerow(vlr[index,:].tolist())
+                f.close()
+
+            with open(ROOT+"/data/test/xie_beni.csv",'a',newline='') as f:
+                writer_object = csv.writer(f)
+                writer_object.writerow(xb[index,:].tolist())
+                f.close()
+
+            with open(ROOT+"/data/test/SSE.csv",'a',newline='') as f:
+                writer_object = csv.writer(f)
+                writer_object.writerow(sse[index,:].tolist())
+                f.close()
+
+            with open(ROOT+"/data/test/curvature_method.csv",'a',newline='') as f:
+                writer_object = csv.writer(f)
+                writer_object.writerow(cv[index,:].tolist())
+                f.close()
+    """        
 
     with open(ROOT+"/data/test/names.txt", "w") as txt_file:
         for line in names:
@@ -463,13 +546,22 @@ if __name__ == "__main__":
     with open(ROOT+"/data/test/scenarios.txt", "w") as txt_file:
         for line in scenarios:
             txt_file.write(line + "\n")
+    """
 
     names=np.asarray(names)
     
+    """
     df_s= pd.read_csv(ROOT+"/data/test/shilhouette.csv",header=None).set_index(names).drop(columns=0).to_csv(ROOT+"/data/test/shilhouette.csv")
     df_ch= pd.read_csv(ROOT+"/data/test/calinski_harabasz.csv",header=None).drop(columns=0).set_index(names).to_csv(ROOT+"/data/test/calinski_harabasz.csv")
     df_db= pd.read_csv(ROOT+"/data/test/davies_boulding.csv",header=None).drop(columns=0).set_index(names).to_csv(ROOT+"/data/test/davies_boulding.csv")
+    
     for orn in orness:
         df_gci= pd.read_csv(ROOT+"/data/test/gci_"+str(orn)+".csv",header=None).drop(columns=0).set_index(names).to_csv(ROOT+"/data/test/gci_"+str(orn)+".csv")
     df_y= pd.read_csv(ROOT+"/data/test/y.csv",header=None).to_csv(ROOT+"/data/test/y.csv")
+    """
     
+    pd.read_csv(ROOT+"/data/test/bic_fixed.csv",header=None).set_index(names).drop(columns=0).to_csv(ROOT+"/data/test/bic_fixed.csv")
+    pd.read_csv(ROOT+"/data/test/SSE.csv",header=None).set_index(names).drop(columns=0).to_csv(ROOT+"/data/test/SSE.csv")
+    pd.read_csv(ROOT+"/data/test/curvature_method.csv",header=None).set_index(names).drop(columns=0).to_csv(ROOT+"/data/test/curvature_method.csv")
+    pd.read_csv(ROOT+"/data/test/xie_beni.csv",header=None).set_index(names).drop(columns=0).to_csv(ROOT+"/data/test/xie_beni.csv")
+    pd.read_csv(ROOT+"/data/test/variance_last_reduction.csv",header=None).set_index(names).drop(columns=0).to_csv(ROOT+"/data/test/variance_last_reduction.csv")

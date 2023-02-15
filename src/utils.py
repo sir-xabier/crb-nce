@@ -101,9 +101,19 @@ def davies_bouldin_score(X, y):
     else:
         return dbc(X, y)
 
+def sse(X, y, centroids):
+    K = len(np.unique(y))
+    sse_= 0.0
+    for k in range(K):
+        X_k=X[np.argwhere(y == k)]
+        c= centroids[k] 
+        for x in X_k:
+            sse_+= np.linalg.norm(x - c)**2 
+    return sse_
+
 
 # Taken from https://stats.stackexchange.com/questions/90769/using-bic-to-estimate-the-number-of-k-in-kmeans
-def bic_fixed(kmeans,X):
+def bic_fixed(X, y):
     """
     Computes the BIC metric for a given clusters
 
@@ -118,17 +128,16 @@ def bic_fixed(kmeans,X):
     BIC value
     """
     # assign centers and labels
-    centers = [kmeans.cluster_centers_]
-    labels  = kmeans.labels_
+ 
     #number of clusters
-    m = kmeans.n_clusters
+    m = len(np.unique(y))
     # size of the clusters
-    n = np.bincount(labels)
+    n = np.bincount(y)
     #size of data set
     N, d = X.shape
 
     #compute variance for all clusters beforehand
-    cl_var = (1.0 / (N - m) / d) * sum([sum(distance.cdist(X[np.where(labels == i)], [centers[0][i]], 
+    cl_var = (1.0 / (N - m) / d) * sum([sum(distance.cdist(X[np.where(y == i)], [y[i]], 
              'euclidean')**2) for i in range(m)])
 
     const_term = 0.5 * m * np.log(N) * (d+1)
@@ -144,48 +153,51 @@ def bic_fixed(kmeans,X):
 def xie_beni_ts(X, y, centroids):
     K = len(np.unique(y))
 
-    intraclass_similarity = 0.0
+    intraclass_similarity= sse(X, y, centroids)
     cluster_dispersion    = 0.0
     min_dispersion        = np.inf
 
-    for k in range(K):
-        X_k=X[np.argwhere(y == k)]
-        c= centroids[k] 
-        for x in X_k:
-                intraclass_similarity+= np.linalg.norm(x - c)**2 
-        
     for k1 in range(K-1):
-        c= centroids[k] 
+        c= centroids[k1] 
         for k2 in range(k1+1,K):
                 aux= np.linalg.norm(centroids[k2] - c)**2 
                 cluster_dispersion   += aux
     
                 if aux < min_dispersion:
                     min_dispersion= aux
-
         
     return (intraclass_similarity + 1/(K * (K-1)) * cluster_dispersion) / (1/K + min_dispersion)
 
+def curvature_method(sse_list):
 
-def curvature_method(X, y, centroids, j_k1=None):
+    curvatures=[]
+    
+    for i in range(1, len(sse_list)-1):
+        curvatures.append( (sse_list[i-1] - sse_list[i]) / (sse_list[i] - sse_list[i+1]))
+    
+    return np.array(curvatures)
+
+
+def variance_last_reduction(X, y, centroids, sse_list):
+
     K = len(np.unique(y))
 
     if K==1:
-        return None 
-    
-    else:
-        j_k= 0.0
+        return 1
 
-        for k in range(K):
-            X_k=X[np.argwhere(y == k)]
-            c= centroids[k] 
-            for x in X_k:
-                j_k+= np.linalg.norm(x - c)**2 
-            x
-        if j_k1 is None:
-            j_k1= np.linalg.norm(X - np.mean(X))**2
+    sse_= sse(X, y, centroids)
+    sse_fixed= np.inf
     
-        return j_k1/j_k
+    N= y.shape[0]
+
+    for j in range(1,len(sse_list)):
+        aux=(j * sse_list[j])/ (N - j)  
+
+        if aux < sse_fixed:
+            sse_fixed= aux
+
+    return np.sqrt(sse_  / (((N - K) / K) * sse_fixed))
+
 
 
 
