@@ -1,7 +1,7 @@
 import os
 import numpy as np
 import pandas as pd
-from Functions import conds_score2
+from utils import conds_score2
 import warnings
 warnings.filterwarnings("ignore")
 from sklearn.metrics import mean_absolute_error,accuracy_score,median_absolute_error

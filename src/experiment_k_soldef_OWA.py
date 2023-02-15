@@ -8,7 +8,7 @@ Created on Fri Nov 11 12:13:23 2022
 import os
 import numpy as np
 import pandas as pd
-from Functions import conds_score8
+from utils import conds_score8
 import warnings
 warnings.filterwarnings("ignore")
 from sklearn.metrics import mean_absolute_error,accuracy_score

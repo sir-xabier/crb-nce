@@ -2,7 +2,7 @@ import os
 
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.spatial import distance_matrix
+from scipy.spatial import distance_matrix,distance
 from sklearn.metrics import silhouette_score as sc
 from sklearn.metrics import calinski_harabasz_score as chc
 from sklearn.metrics import davies_bouldin_score as dbc
@@ -100,6 +100,92 @@ def davies_bouldin_score(X, y):
         return None
     else:
         return dbc(X, y)
+
+
+# Taken from https://stats.stackexchange.com/questions/90769/using-bic-to-estimate-the-number-of-k-in-kmeans
+def bic_fixed(kmeans,X):
+    """
+    Computes the BIC metric for a given clusters
+
+    Parameters:
+    -----------------------------------------
+    kmeans:  List of clustering object from scikit learn
+
+    X     :  multidimension np array of data points
+
+    Returns:
+    -----------------------------------------
+    BIC value
+    """
+    # assign centers and labels
+    centers = [kmeans.cluster_centers_]
+    labels  = kmeans.labels_
+    #number of clusters
+    m = kmeans.n_clusters
+    # size of the clusters
+    n = np.bincount(labels)
+    #size of data set
+    N, d = X.shape
+
+    #compute variance for all clusters beforehand
+    cl_var = (1.0 / (N - m) / d) * sum([sum(distance.cdist(X[np.where(labels == i)], [centers[0][i]], 
+             'euclidean')**2) for i in range(m)])
+
+    const_term = 0.5 * m * np.log(N) * (d+1)
+
+    BIC = np.sum([n[i] * np.log(n[i]) -
+               n[i] * np.log(N) -
+             ((n[i] * d) / 2) * np.log(2*np.pi*cl_var) -
+             ((n[i] - 1) * d/ 2) for i in range(m)]) - const_term
+
+    return(BIC)
+
+
+def xie_beni_ts(X, y, centroids):
+    K = len(np.unique(y))
+
+    intraclass_similarity = 0.0
+    cluster_dispersion    = 0.0
+    min_dispersion        = np.inf
+
+    for k in range(K):
+        X_k=X[np.argwhere(y == k)]
+        c= centroids[k] 
+        for x in X_k:
+                intraclass_similarity+= np.linalg.norm(x - c)**2 
+        
+    for k1 in range(K-1):
+        c= centroids[k] 
+        for k2 in range(k1+1,K):
+                aux= np.linalg.norm(centroids[k2] - c)**2 
+                cluster_dispersion   += aux
+    
+                if aux < min_dispersion:
+                    min_dispersion= aux
+
+        
+    return (intraclass_similarity + 1/(K * (K-1)) * cluster_dispersion) / (1/K + min_dispersion)
+
+
+def curvature_method(X, y, centroids, j_k1=None):
+    K = len(np.unique(y))
+
+    if K==1:
+        return None 
+    
+    else:
+        j_k= 0.0
+
+        for k in range(K):
+            X_k=X[np.argwhere(y == k)]
+            c= centroids[k] 
+            for x in X_k:
+                j_k+= np.linalg.norm(x - c)**2 
+            x
+        if j_k1 is None:
+            j_k1= np.linalg.norm(X - np.mean(X))**2
+    
+        return j_k1/j_k
 
 
 
