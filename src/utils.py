@@ -101,7 +101,7 @@ def davies_bouldin_score(X, y):
     else:
         return dbc(X, y)
 
-def sse(X, y, centroids):
+def SSE(X, y, centroids):
     K = len(np.unique(y))
     sse_= 0.0
     for k in range(K):
@@ -113,7 +113,7 @@ def sse(X, y, centroids):
 
 
 # Taken from https://stats.stackexchange.com/questions/90769/using-bic-to-estimate-the-number-of-k-in-kmeans
-def bic_fixed(X, y):
+def bic_fixed(X, y, centroids, sse):
     """
     Computes the BIC metric for a given clusters
 
@@ -128,17 +128,17 @@ def bic_fixed(X, y):
     BIC value
     """
     # assign centers and labels
- 
+    
     #number of clusters
     m = len(np.unique(y))
     # size of the clusters
-    n = np.bincount(y)
+    n = np.bincount(np.array(y,dtype='int64'))
     #size of data set
     N, d = X.shape
 
     #compute variance for all clusters beforehand
-    cl_var = (1.0 / (N - m) / d) * sum([sum(distance.cdist(X[np.where(y == i)], [y[i]], 
-             'euclidean')**2) for i in range(m)])
+    cl_var = (1.0 / (N - m) / d) * sse
+
 
     const_term = 0.5 * m * np.log(N) * (d+1)
 
@@ -150,12 +150,14 @@ def bic_fixed(X, y):
     return(BIC)
 
 
-def xie_beni_ts(X, y, centroids):
+def xie_beni_ts(X, y, centroids, sse):
     K = len(np.unique(y))
 
-    intraclass_similarity= sse(X, y, centroids)
+    intraclass_similarity= sse
     cluster_dispersion    = 0.0
     min_dispersion        = np.inf
+    if K==1:
+        return np.nan
 
     for k1 in range(K-1):
         c= centroids[k1] 
@@ -178,14 +180,13 @@ def curvature_method(sse_list):
     return np.array(curvatures)
 
 
-def variance_last_reduction(X, y, centroids, sse_list):
+def variance_last_reduction(X, y, centroids, sse_list, sse):
 
     K = len(np.unique(y))
 
     if K==1:
         return 1
 
-    sse_= sse(X, y, centroids)
     sse_fixed= np.inf
     
     N= y.shape[0]
@@ -196,7 +197,7 @@ def variance_last_reduction(X, y, centroids, sse_list):
         if aux < sse_fixed:
             sse_fixed= aux
 
-    return np.sqrt(sse_  / (((N - K) / K) * sse_fixed))
+    return np.sqrt(sse  / (((N - K) / K) * sse_fixed))
 
 
 

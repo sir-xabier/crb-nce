@@ -20,8 +20,9 @@ from sklearn.cluster import kmeans_plusplus
 # Cluster index modules 
 from utils import global_covering_index, coverings
 from utils import silhouette_score, calinski_harabasz_score, davies_bouldin_score
-from utils import bic_fixed, sse, curvature_method, variance_last_reduction, xie_beni_ts
-
+from utils import bic_fixed, curvature_method, variance_last_reduction, xie_beni_ts
+from utils import SSE
+import zarr
 
 class NumpyEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -318,35 +319,12 @@ if __name__ == "__main__":
 
     gci=np.zeros((O,N,len(K)+1))
     acc=np.zeros(N,dtype=float)
+
+    y_best={}
+    for idx in range(4):
+        y_best[idx]=np.load(ROOT+f"/data/test/y{idx}.npy", allow_pickle=True)
         
-    # Input
-    data_file = ROOT+"/data/test/yk.csv"
 
-    # Delimiter
-    data_file_delimiter = ','
-
-    # The max column count a line in the file could have
-    largest_column_count = 0
-
-    # Loop the data lines
-    with open(data_file, 'r') as temp_f:
-        # Read the lines
-        lines = temp_f.readlines()
-
-        for l in lines:
-            # Count the column count for the current line
-            column_count = len(l.split(data_file_delimiter)) + 1
-            
-            # Set the new most column count
-            largest_column_count = column_count if largest_column_count < column_count else largest_column_count
-
-    # Generate column names (will be 0, 1, 2, ..., largest_column_count - 1)
-    column_names = [i for i in range(0, largest_column_count)]
-
-    # Read csv
-
-    yk = pd.read_csv(data_file, header=None, delimiter=data_file_delimiter, names=column_names)
-    
     nclases_pred_gci=np.zeros(N,dtype=int)
     nclases_pred_s=np.zeros(N,dtype=int)
     nclases_pred_ch=np.zeros(N,dtype=int)
@@ -364,19 +342,18 @@ if __name__ == "__main__":
 
     start_time=time.time()
     
-    if os.path.exists(ROOT+"/data/test/y.csv"):
-        start_id=len(pd.read_csv(ROOT+"/data/test/y.csv").values.tolist())
-    
-    
-    else:
-        start_id=0
+    #if os.path.exists(ROOT+"/data/test/bic_fixed.csv"): # "/data/test/y.csv"
+    #    start_id=len(pd.read_csv(ROOT+"/data/test/bic_fixed.csv").values.tolist())
+    #else:
+    start_id=0
 
     for i_d, (name,item) in tq.tqdm(enumerate(ds_dic.items())):
         
         print("Comenzando dataset "+name)
 
-        if i_d<start_id:
-            continue
+        #if i_d<start_id:
+        #    continue
+        
         X = np.array(item['Value'][0])
         n=X.shape[0]
         
@@ -402,9 +379,18 @@ if __name__ == "__main__":
 
             y[index]=true_k
 
+            chunk=0
+            
             for k in K: 
- 
-                y_best_sol=None
+                
+                while (i_d+1)*(i_a + 1)*k > 10**4 * (chunk+1):
+                    chunk+=1
+
+                y_best_sol = np.array(y_best[chunk][start_id, 1 : 1 + X.shape[0]],dtype="int64")
+                
+                #print(y_best_sol.shape, X.shape,len(y_best_sol[y_best_sol!=""]))
+
+                start_id+=1
                 """
                 
                 if clf.__name__ == "AgglomerativeClustering":
@@ -444,6 +430,7 @@ if __name__ == "__main__":
                             best_sol_err=this_err
                             y_best_sol=y_pred
                 """
+
                 if y_best_sol is not None:
                         
                     centroides=np.array([np.mean(X[y_best_sol==i],axis=0) for i in np.unique(np.arange(k))])
@@ -455,16 +442,19 @@ if __name__ == "__main__":
                     ch[index,k]=calinski_harabasz_score(X,y_best_sol)
                     db[index,k]=davies_bouldin_score(X,y_best_sol)
                     """
+                    sse_=SSE(X,y_best_sol, centroides)
 
-                    vlr[index,k]=variance_last_reduction(X,y_best_sol, centroides, sse[index,:k])
-                    sse[index,k]=sse(X,y_best_sol, centroides)
-                    bic[index,k]=bic_fixed(X,y_best_sol)
-                    xb[index,k]=xie_beni_ts(X,y_best_sol, centroides)
+                    vlr[index,k]=variance_last_reduction(X,y_best_sol, centroides, sse[index,:k], sse_)
+                    sse[index,k]=sse_
+
+                    bic[index,k]=bic_fixed(X,y_best_sol, centroides, sse_)
+                    xb[index,k]=xie_beni_ts(X,y_best_sol, centroides, sse_)
                     """
                     
                     for i_o, orn in enumerate(orness):
                         path=ROOT + "/data/weights/DG/" + str(n) + "/W_" + str(n) + "_" + str(orn) + ".npy"  
                         gci[i_o,index,k]=global_covering_index(U,function='OWA',orness=orn,path=path)
+
                     """
 
 #                    if k==true_k:
@@ -479,7 +469,8 @@ if __name__ == "__main__":
                         f.close()
                     """
 
-            cv[index,k]=curvature_method(sse[index,:])
+            cv[index,2:]=curvature_method(sse[index,:])
+
             """
             
             with open(ROOT+"/data/test/y.csv",'a',newline='') as f:
