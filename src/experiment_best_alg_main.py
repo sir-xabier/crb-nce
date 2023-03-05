@@ -16,12 +16,16 @@ with open(ROOT+"/data/test/names.txt", "r") as txt_file:
 df_s= pd.read_csv(ROOT+"/data/test/shilhouette.csv",index_col=None).drop(columns=["Unnamed: 0"])
 df_ch= pd.read_csv(ROOT+"/data/test/calinski_harabasz.csv",index_col=None).drop(columns=["Unnamed: 0"])
 df_db= pd.read_csv(ROOT+"/data/test/davies_boulding.csv",index_col=None).drop(columns=["Unnamed: 0"])
+df_bic=pd.read_csv(ROOT+"/data/test/bic_fixed.csv",index_col=None).drop(columns=["Unnamed: 0"])
+df_cm=pd.read_csv(ROOT+"/data/test/curvature_method.csv",index_col=None).drop(columns=["Unnamed: 0"])
+df_xb=pd.read_csv(ROOT+"/data/test/xie_beni.csv",index_col=None).drop(columns=["Unnamed: 0"])
+df_vlr=pd.read_csv(ROOT+"/data/test/variance_last_reduction.csv",index_col=None).drop(columns=["Unnamed: 0"])
 df_gci= pd.read_csv(ROOT+"/data/test/gci_0.45.csv",index_col=None).drop(columns=["Unnamed: 0"])
 y= pd.read_csv(ROOT+"/data/test/y.csv",header=None).values[1:,-1].astype(int).reshape(-1,1)
 acc=pd.read_csv(ROOT+"/data/test/acc.csv",header=None).values[:,-1].reshape(-1,1)
 
-all_df={"s":df_s,"ch":df_ch,"db":df_db,"gci":df_gci,"true_y":y}
-df=pd.DataFrame(columns=["s","ch","db","gci","true_y"],index=names)
+all_df={"s":df_s,"ch":df_ch,"db":df_db,"bic":df_bic,"curv_m":df_cm,"xie_b":df_xb,"var_lr":df_vlr,"gci":df_gci,"true_y":y}
+df=pd.DataFrame(columns=["s","ch","db", "bic", "curv_m", "xie_b", "var_lr","gci","true_y"],index=names)
 
 for name,df_ in all_df.items():
     if  name!="true_y":

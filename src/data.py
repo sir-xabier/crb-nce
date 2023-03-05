@@ -22,7 +22,6 @@ from utils import global_covering_index, coverings
 from utils import silhouette_score, calinski_harabasz_score, davies_bouldin_score
 from utils import bic_fixed, curvature_method, variance_last_reduction, xie_beni_ts
 from utils import SSE
-import zarr
 
 class NumpyEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -312,48 +311,39 @@ if __name__ == "__main__":
     ch=np.zeros((N,len(K)+1))
     db=np.zeros((N,len(K)+1))
     sse=np.zeros((N,len(K)+1))
+    sse[:,0]=None
     bic=np.zeros((N,len(K)+1))
     xb=np.zeros((N,len(K)+1))
     cv=np.zeros((N,len(K)+1))
     vlr=np.zeros((N,len(K)+1))
 
     gci=np.zeros((O,N,len(K)+1))
+    gci_medioid=np.zeros((O,N,len(K)+1))
+
     acc=np.zeros(N,dtype=float)
 
     y_best={}
     for idx in range(4):
         y_best[idx]=np.load(ROOT+f"/data/test/y{idx}.npy", allow_pickle=True)
         
-
-    nclases_pred_gci=np.zeros(N,dtype=int)
-    nclases_pred_s=np.zeros(N,dtype=int)
-    nclases_pred_ch=np.zeros(N,dtype=int)
-    nclases_pred_db=np.zeros(N,dtype=int)
-    nclases_pred_xb=np.zeros(N,dtype=int)
-    nclases_pred_bic=np.zeros(N,dtype=int)
-    nclases_pred_cv=np.zeros(N,dtype=int)
-    nclases_pred_vlr=np.zeros(N,dtype=int)
-
     
     y=np.zeros(N,dtype=int)
 
     names=[]
     scenarios=[]
-
+    cont=0
     start_time=time.time()
     
-    #if os.path.exists(ROOT+"/data/test/bic_fixed.csv"): # "/data/test/y.csv"
-    #    start_id=len(pd.read_csv(ROOT+"/data/test/bic_fixed.csv").values.tolist())
-    #else:
-    start_id=0
+    if os.path.exists(ROOT+"/data/test/bic_fixed.csv"): # "/data/test/y.csv"
+        start_id=len(pd.read_csv(ROOT+"/data/test/bic_fixed.csv").values.tolist())
+    
+    else:
+        start_id=0
 
     for i_d, (name,item) in tq.tqdm(enumerate(ds_dic.items())):
         
         print("Comenzando dataset "+name)
 
-        #if i_d<start_id:
-        #    continue
-        
         X = np.array(item['Value'][0])
         n=X.shape[0]
         
@@ -383,20 +373,22 @@ if __name__ == "__main__":
             
             for k in K: 
                 
-                while (i_d+1)*(i_a + 1)*k > 10**4 * (chunk+1):
+                while cont >= 10**4 * (chunk+1):
                     chunk+=1
 
-                y_best_sol = np.array(y_best[chunk][start_id, 1 : 1 + X.shape[0]],dtype="int64")
+                y_best_sol = np.array(y_best[chunk][cont%(10**4) , 1 : 1 + X.shape[0]],dtype="int64")
+                cont+=1       
                 
-                #print(y_best_sol.shape, X.shape,len(y_best_sol[y_best_sol!=""]))
-
-                start_id+=1
+                
+                if i_d<start_id:
+                    continue
+        
                 """
                 
                 if clf.__name__ == "AgglomerativeClustering":
                     clf_=clf(n_clusters=k,**args)
                     y_best_sol=clf_.fit_predict(X)
-#                    centroides=np.array([np.mean(X[y_best_sol==i],axis=0) for i in np.unique(np.arange(k))])
+                    centroides=np.array([np.mean(X[y_best_sol==i],axis=0) for i in np.unique(np.arange(k))])
                 else:
                     best_sol_err=np.inf
 
@@ -435,33 +427,39 @@ if __name__ == "__main__":
                         
                     centroides=np.array([np.mean(X[y_best_sol==i],axis=0) for i in np.unique(np.arange(k))])
                     
+                    medioides = np.array([X[y_best_sol == i][np.argmin(np.sum(np.abs(X[y_best_sol == i][:, np.newaxis, :] - X[y_best_sol == i]), axis=2), axis=0)] for i in np.unique(y_best_sol)]) # Hay que testear si funciona
+
                     
                     U=coverings(X,centroides,distance_normalizer=distance_normalizer)
+                    
+                    U_medioid=coverings(X,medioides,distance_normalizer=distance_normalizer)
+
                     """
                     s[index,k]=silhouette_score(X,y_best_sol)
                     ch[index,k]=calinski_harabasz_score(X,y_best_sol)
                     db[index,k]=davies_bouldin_score(X,y_best_sol)
                     """
-                    sse_=SSE(X,y_best_sol, centroides)
 
-                    vlr[index,k]=variance_last_reduction(X,y_best_sol, centroides, sse[index,:k], sse_)
+                    sse_=SSE(X,y_best_sol, centroides)
                     sse[index,k]=sse_
 
+                    vlr[index,k]=variance_last_reduction(y_best_sol, sse[index,1:k], sse_)
                     bic[index,k]=bic_fixed(X,y_best_sol, centroides, sse_)
                     xb[index,k]=xie_beni_ts(X,y_best_sol, centroides, sse_)
+
                     """
                     
                     for i_o, orn in enumerate(orness):
                         path=ROOT + "/data/weights/DG/" + str(n) + "/W_" + str(n) + "_" + str(orn) + ".npy"  
                         gci[i_o,index,k]=global_covering_index(U,function='OWA',orness=orn,path=path)
+                        gci_medioid[i_o,index,k]=global_covering_index(U_medioid,function='OWA',orness=orn,path=path)
+                    
 
-                    """
-
-#                    if k==true_k:
-#                        acc[index]= np.su(y_best_sol==y_)/len(y_)
-                        
+                    if k==true_k:
+                        acc[index]= np.su(y_best_sol==y_)/len(y_)
+                                         
                     namek=[names[index]+"_"+str(k)]
-                    """
+                    
                     
                     with open(ROOT+"/data/test/yk.csv",'a',newline='') as f:
                         writer_object = csv.writer(f)
@@ -469,7 +467,7 @@ if __name__ == "__main__":
                         f.close()
                     """
 
-            cv[index,2:]=curvature_method(sse[index,:])
+            cv[index,2:]=curvature_method(sse[index,1:])
 
             """
             
@@ -497,6 +495,11 @@ if __name__ == "__main__":
                 with open(ROOT+"/data/test/gci_"+str(orn)+".csv",'a',newline='') as f:
                     writer_object = csv.writer(f)
                     writer_object.writerow(gci[i_o,index,:].tolist(),)
+                    f.close()
+
+                with open(ROOT+"/data/test/gci_medioid"+str(orn)+".csv",'a',newline='') as f:
+                    writer_object = csv.writer(f)
+                    writer_object.writerow(gci_medioid[i_o,index,:].tolist(),)
                     f.close()
  
             with open(ROOT+"/data/test/acc.csv",'a',newline='') as f:
@@ -548,6 +551,7 @@ if __name__ == "__main__":
     
     for orn in orness:
         df_gci= pd.read_csv(ROOT+"/data/test/gci_"+str(orn)+".csv",header=None).drop(columns=0).set_index(names).to_csv(ROOT+"/data/test/gci_"+str(orn)+".csv")
+        df_gci= pd.read_csv(ROOT+"/data/test/gci_medioid"+str(orn)+".csv",header=None).drop(columns=0).set_index(names).to_csv(ROOT+"/data/test/gci_medioid"+str(orn)+".csv")
     df_y= pd.read_csv(ROOT+"/data/test/y.csv",header=None).to_csv(ROOT+"/data/test/y.csv")
     """
     

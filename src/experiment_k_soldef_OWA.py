@@ -11,18 +11,28 @@ import pandas as pd
 from utils import conds_score8
 import warnings
 warnings.filterwarnings("ignore")
-from sklearn.metrics import mean_absolute_error,accuracy_score
-#from STAC import friedman_test, holm_test
-#import matplotlib as plt
+from sklearn.metrics import mean_absolute_error,accuracy_score, mean_squared_error
+from STAC import friedman_test, holm_test
+import matplotlib as plt
 
 #Data
 #ROOT= os.path.abspath(os.path.join(os.getcwd(), os.pardir))
 ROOT= os.getcwd()
 
+with open(ROOT+"/data/test/names.txt", "r") as txt_file:  
+      names=np.array(txt_file.read().replace('\n', ' ').split(" "))[:-1]
+      txt_file.close()
+
 #test renuevo
 df_s= pd.read_csv(ROOT+"/data/test/shilhouette.csv",header=0,index_col=0)
 df_ch= pd.read_csv(ROOT+"/data/test/calinski_harabasz.csv",header=0,index_col=0)
 df_db= pd.read_csv(ROOT+"/data/test/davies_boulding.csv",header=0,index_col=0)
+df_bic=pd.read_csv(ROOT+"/data/test/bic_fixed.csv",header=0,index_col=0)
+df_cm=pd.read_csv(ROOT+"/data/test/curvature_method.csv",header=0,index_col=0)
+df_xb=pd.read_csv(ROOT+"/data/test/xie_beni.csv",header=0,index_col=0)
+df_vlr=pd.read_csv(ROOT+"/data/test/variance_last_reduction.csv",header=0,index_col=0)
+
+
 df_gci10= pd.read_csv(ROOT+"/data/test/gci_0.1.csv",header=0,index_col=0)
 df_gci20= pd.read_csv(ROOT+"/data/test/gci_0.2.csv",header=0,index_col=0)
 df_gci30= pd.read_csv(ROOT+"/data/test/gci_0.3.csv",header=0,index_col=0)
@@ -50,12 +60,12 @@ b[0]=0; b[1]=0;
 args={'u':u,'c':c,'b':b}
 #c_complejo=np.concatenate((u,c,b))
 #optimal_u={"_si":{'u':u,'c':c,'b':b}}
-all_df={"s":df_s,"ch":df_ch,"db":df_db,
+all_df={"s":df_s,"ch":df_ch,"db":df_db,"bic":df_bic,"curv_m":df_cm,"xie_b":df_xb,"var_lr":df_vlr,
         "gci_0.1":df_gci10,"gci_0.2":df_gci20,"gci_0.3":df_gci30,
         "gci_0.35":df_gci35,"gci_0.40":df_gci40,"gci_0.45":df_gci45,
         "gci":df_gci,
         "y":df_y}
-crit=["s","ch","db"]
+crit=["s","ch","db", "bic", "curv_m", "xie_b", "var_lr"]
 crit_gci=["gci_0.1","gci_0.2","gci_0.3","gci_0.35","gci_0.40","gci_0.45","gci"]
 col_crit=crit+crit_gci
 df=pd.DataFrame(columns=col_crit.copy().append("y"),index=df_s.index)
@@ -63,13 +73,16 @@ df_flag=pd.DataFrame(columns=crit_gci,index=df_s.index)
 
 select_k= lambda x: np.nanargmax(x)+1
 select_k_db= lambda x: np.nanargmin(x)+1
+select_k_vlr = lambda x: np.nanargmin(np.abs(x - 1)) +1
 
 for name,df_ in all_df.items():
   if name!="y" and ("gci" in name)==False:
     if name=="db":
-      df[name] = df_.apply(select_k_db,axis=1).values.reshape(-1,1)
+        df[name] = df_.apply(select_k_db,axis=1).values.reshape(-1,1)
+    elif name=="var_lr":
+        df[name] = df_.apply(select_k_vlr,axis=1).values.reshape(-1,1)
     else:
-      df[name] = df_.apply(select_k,axis=1).values.reshape(-1,1)
+        df[name] = df_.apply(select_k,axis=1).values.reshape(-1,1)
   elif "gci" in name:
     pred_flag=df_.apply(lambda x: conds_score8(gci_=x,id=x.name,**args),axis=1).values
     flags=[]
@@ -91,11 +104,11 @@ df_flag=df_flag[no_cmeans]
 df.drop(columns=["algorithm"],axis=1,inplace=True)
 
 
-df_metrics=pd.DataFrame(columns=col_crit,index=["MAE","ACC"])
+df_metrics=pd.DataFrame(columns=col_crit,index=["MAE","MSE","ACC"])
 #Global metrics
 for c in df.columns[:-1]:
-    df_metrics[c]= [mean_absolute_error(df[c],df["y"]),accuracy_score(df[c],df["y"])]
-
+    df_metrics[c]= [mean_absolute_error(df[c],df["y"]),mean_squared_error(df[c],df["y"]),accuracy_score(df[c],df["y"])]
+df_metrics.to_excel(ROOT+"/out_files/F_metrics_"+id_sol+".xlsx")
 
 with open(ROOT+"/data/test/scenarios.txt") as f:
     scenarios=f.readlines()
@@ -135,7 +148,7 @@ df_.drop(columns=["dataset","algorithm","scenario","dt"],axis=1).groupby(["dimen
 
 df_.to_excel(ROOT+"/out_files/F_err_"+id_sol+".xlsx")
 df.to_excel(ROOT+"/out_files/F_"+id_sol+".xlsx")
-df_metrics.to_excel(ROOT+"/out_files/F_metrics_"+id_sol+".xlsx")
+ 
 
 df1=df_[df_["K"]=="K1"]
 df1.drop(columns=["dimensions","N","K"],axis=1).groupby(["scenario"]).agg(acc).to_excel(ROOT+"/out_files/F_K1_acc_scen_"+id_sol+".xlsx")
@@ -168,9 +181,10 @@ dfn1.drop(columns=["dataset","algorithm","scenario","dt"],axis=1).groupby(["dime
 
 df_flag[df_["K"]!="K1"].mean().to_excel(ROOT+"/out_files/F_SinK1_flags_"+id_sol+".xlsx")
 
-'''
+
 out=dfn1.drop(columns=["dataset","algorithm","K"],axis=1).groupby(["scenario"]).agg(acc)
 out=out.drop(columns=["dimensions","N","dt"],axis=1)
+"""
 
 iman_davenport, p_value, rankings_avg, rankings_cmp=friedman_test(out.s, out.ch, out.db, out.gci_si)
 
@@ -183,8 +197,6 @@ if p_value < 0.05:
     data={'z_value':z_values,'p_value':p_values,'adj_p_value':adj_p_values}
     df_holm=pd.DataFrame(data,index=comparisons).to_excel(ROOT+"/out_files/F_Holm_"+id_sol+".xlsx")
     
-'''
-'''
 df_["flags"].sum()
 (1-df_["flags"]).sum()
 (1-df_["flags"][df_["gci_si"]!=0]).sum()
@@ -197,10 +209,8 @@ ap=dfn1.drop(columns=["dataset","algorithm","scenario"],axis=1) \
     .groupby(["dt"]) \
     .agg(acc) 
 ap["count"]=dfn1.groupby(["dt"]).agg(count=('N','size'))
-   
-'''
+"""   
 
-'''
 import seaborn as sns
 sns.set_theme()
 def moving_average(a, n=3) :
@@ -226,4 +236,4 @@ sns.relplot(
     x="dt", y="Acc",
     hue="Method"
 )
-'''
+

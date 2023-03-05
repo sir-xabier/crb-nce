@@ -101,19 +101,17 @@ def davies_bouldin_score(X, y):
     else:
         return dbc(X, y)
 
+
 def SSE(X, y, centroids):
-    K = len(np.unique(y))
-    sse_= 0.0
-    for k in range(K):
-        X_k=X[np.argwhere(y == k)]
-        c= centroids[k] 
-        for x in X_k:
-            sse_+= np.linalg.norm(x - c)**2 
-    return sse_
+    sse = 0.0
+    for i, centroid in enumerate(centroids):
+        idx = np.where(y == i)[0]
+        sse += np.sum((X[idx] - centroid)**2)
+    return sse
 
 
 # Taken from https://stats.stackexchange.com/questions/90769/using-bic-to-estimate-the-number-of-k-in-kmeans
-def bic_fixed(X, y, centroids, sse):
+def bic_fixed(X, y, sse):
     """
     Computes the BIC metric for a given clusters
 
@@ -150,19 +148,19 @@ def bic_fixed(X, y, centroids, sse):
     return(BIC)
 
 
-def xie_beni_ts(X, y, centroids, sse):
+def xie_beni_ts(y, centroids, sse):
     K = len(np.unique(y))
 
     intraclass_similarity= sse
     cluster_dispersion    = 0.0
     min_dispersion        = np.inf
     if K==1:
-        return np.nan
+        return None
 
     for k1 in range(K-1):
         c= centroids[k1] 
         for k2 in range(k1+1,K):
-                aux= np.linalg.norm(centroids[k2] - c)**2 
+                aux= np.sum(centroids[k2] - c)**2 
                 cluster_dispersion   += aux
     
                 if aux < min_dispersion:
@@ -174,18 +172,18 @@ def curvature_method(sse_list):
 
     curvatures=[]
     
-    for i in range(1, len(sse_list)-1):
-        curvatures.append( (sse_list[i-1] - sse_list[i]) / (sse_list[i] - sse_list[i+1]))
-    
+    for i in range(0, len(sse_list)-1):
+        curvatures.append( (sse_list[i-1] - sse_list[i]) / (sse_list[i] - sse_list[i+1]) -1 )
+
     return np.array(curvatures)
 
 
-def variance_last_reduction(X, y, centroids, sse_list, sse):
+def variance_last_reduction(y, sse_list, sse):
 
     K = len(np.unique(y))
 
     if K==1:
-        return 1
+        return None
 
     sse_fixed= np.inf
     
@@ -455,3 +453,58 @@ def subplot_elbow(nx, ny, ns, rango, gc, title_bool=0, title='', xlim1=0, xlim2=
     plt.ylabel('Valores de GCI')
 
 
+
+def conds_score8(gci_,id,u,p=None,c=None,b=None):
+    
+    if "nan"==str(id):
+        return np.NAN
+
+    k=gci_.shape[0]
+    s_c=1-gci_ #proporción sin cubrimiento total
+    d=np.diff(gci_)
+    d2=np.diff(d)
+    p_e=d/s_c[:-1] #proporciones que se cubren en cada k
+    r_d=d[:-1]/d[1:] # ratio diferencias max_K-2
+    r_d2=d2[:-1]/d2[1:] # ratio diferencias 2 max_K-3
+        
+    pts=np.zeros(k-3)
+    c_d=np.zeros(k-3)
+    c_d2=np.zeros(k-3)
+
+    pts[0]=np.amax([np.sum(c[:7])-(b[0]*1+b[1]*2),1])
+
+    for i in range(1,k-3):
+        pts[i]=i/(k-3) #fracción creciente
+        
+        p_e_m=sum(p_e[:i+1]>=p_e[i])/(i+1) #prop de cubrimientos marginales anteriores mayores que el actual
+        c_d[i-1]=d[i-1]/max(d[i:])
+        c_d2[i-1]=d2[i-1]/min(d2[i:])
+        m_d2=min(d2[i:])
+
+        if c[0]==1 and p_e[i-1] > u[0]: pts[i]+=1
+            
+        if c[1]==1 and r_d[i-1] > u[1]: pts[i]+=1
+
+        if c[2]==1 and p_e_m > u[2]: pts[i]+=1
+
+        #condicion sobre valores restantes de la 2a dif
+        if c[3]==1 and m_d2 > u[3]: pts[i]+=1
+        
+        if c[4]==1 and abs(r_d2[i-1]) > u[4]: pts[i]+=1
+            
+        #ratio de 1a dif actual respecto a max de dif restantes
+        if c[5]==1 and c_d[i-1] > u[5]: pts[i]+=1
+            
+        #ratio de 2a dif actual respecto a min de 2as dif restantes
+        if c[6]==1 and c_d2[i-1] > u[6]: pts[i]+=1
+        
+    a=np.argmax(c_d)    
+    a2=np.argmax(c_d2)
+    
+    if c[7] and a2==a and c_d[a] > u[7]: 
+        pred=a+2
+        flag=1
+    else: 
+        pred=np.argmax(pts)+1
+        flag=0
+    return pred,flag

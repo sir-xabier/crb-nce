@@ -11,7 +11,7 @@ import pandas as pd
 from utils import conds_score8
 import warnings
 warnings.filterwarnings("ignore")
-from sklearn.metrics import mean_absolute_error,accuracy_score
+from sklearn.metrics import mean_absolute_error,mean_squared_error,accuracy_score
 from STAC import friedman_test, holm_test
 import matplotlib as plt
 
@@ -23,6 +23,10 @@ ROOT= os.getcwd()
 df_s= pd.read_csv(ROOT+"/data/test/shilhouette.csv",header=0,index_col=0)
 df_ch= pd.read_csv(ROOT+"/data/test/calinski_harabasz.csv",header=0,index_col=0)
 df_db= pd.read_csv(ROOT+"/data/test/davies_boulding.csv",header=0,index_col=0)
+df_bic=pd.read_csv(ROOT+"/data/test/bic_fixed.csv",header=0,index_col=0)
+df_cm=pd.read_csv(ROOT+"/data/test/curvature_method.csv",header=0,index_col=0)
+df_xb=pd.read_csv(ROOT+"/data/test/xie_beni.csv",header=0,index_col=0)
+df_vlr=pd.read_csv(ROOT+"/data/test/variance_last_reduction.csv",header=0,index_col=0)
 df_gci_45= pd.read_csv(ROOT+"/data/test/gci_0.45.csv",header=0,index_col=0)
 df_gci_50= pd.read_csv(ROOT+"/data/test/gci_0.5.csv",header=0,index_col=0)
 df_y= pd.read_csv(ROOT+"/data/test/y.csv",header=0,index_col=0)
@@ -57,11 +61,11 @@ b[0]=0; b[1]=0;
 args={'u':u,'c':c,'b':b}
 #c_complejo=np.concatenate((u,c,b))
 #optimal_u={"_si":{'u':u,'c':c,'b':b}}
-all_df={"s":df_s,"ch":df_ch,"db":df_db,
+all_df={"s":df_s,"ch":df_ch,"db":df_db,"bic":df_bic,"curv_m":df_cm,"xie_b":df_xb,"var_lr":df_vlr,
         "gci45":df_gci_45,
         "gci50":df_gci_50,
         "y":df_y}
-crit=["s","ch","db"]
+crit=["s","ch","db", "bic", "curv_m", "xie_b", "var_lr"]
 crit_gci=["gci45","gci50"]
 col_crit=crit+crit_gci
 df=pd.DataFrame(columns=col_crit.copy().append("y"),index=df_s.index)
@@ -99,7 +103,7 @@ df.drop(columns=["algorithm"],axis=1,inplace=True)
 df_metrics=pd.DataFrame(columns=col_crit,index=["MAE","ACC"])
 #Global metrics
 for c in df.columns[:-1]:
-    df_metrics[c]= [mean_absolute_error(df[c],df["y"]),accuracy_score(df[c],df["y"])]
+    df_metrics[c]= [mean_absolute_error(df[c],df["y"]),mean_squared_error(df[c],df["y"]),accuracy_score(df[c],df["y"])]
 
 
 with open(ROOT+"/data/test/scenarios.txt") as f:
