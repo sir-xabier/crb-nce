@@ -79,35 +79,22 @@ def conds_score(gci_,id,u,p=None,c=None,b=None):
         flag=0
     return pred,flag
 
+select_k_max= lambda x: np.nanargmax(x)+1
+select_k_min= lambda x: np.nanargmin(x)+1
+#select_k_vlr = lambda x: np.nanargmin(np.abs(x - 1)) +1
+select_k_vlr = lambda x: np.amax(np.array(x <= 1.0).nonzero())+1
+
 
 #Data
 #ROOT= os.path.abspath(os.path.join(os.getcwd(), os.pardir))
-ROOT= os.getcwd()
+ROOT= os.getcwd()   
+df = pd.read_csv(ROOT + "/metrics.csv",  index_col=0)
+df.dropna(inplace=True,axis=0, how='all')
 
-#test renuevo
-df_s= pd.read_csv(ROOT+"/data/test/shilhouette.csv",header=0,index_col=0)
-df_ch= pd.read_csv(ROOT+"/data/test/calinski_harabasz.csv",header=0,index_col=0)
-df_db= pd.read_csv(ROOT+"/data/test/davies_boulding.csv",header=0,index_col=0)
-df_bic=pd.read_csv(ROOT+"/data/test/bic_fixed.csv",header=0,index_col=0)
-df_cm=pd.read_csv(ROOT+"/data/test/curvature_method.csv",header=0,index_col=0)
-df_xb=pd.read_csv(ROOT+"/data/test/xie_beni.csv",header=0,index_col=0)
-df_vlr=pd.read_csv(ROOT+"/data/test/variance_last_reduction.csv",header=0,index_col=0)
-df_gci_45= pd.read_csv(ROOT+"/data/test/gci_0.45.csv",header=0,index_col=0)
-df_gci_50= pd.read_csv(ROOT+"/data/test/gci_0.5.csv",header=0,index_col=0)
-df_y= pd.read_csv(ROOT+"/data/test/y.csv",header=0,index_col=0)
-
-'''df_gci_50["algorithm"]=df_gci_50.apply(lambda x: x.name.split("-")[-1],axis=1)
-no_cmeans=df_gci_50["algorithm"]!="cmeans"
-df_gci_50=df_gci_50[no_cmeans]
-df_gci_50.drop(columns=["algorithm"],axis=1,inplace=True)
-
-df_s["algorithm"]=df_s.apply(lambda x: x.name.split("-")[-1],axis=1)
-no_cmeans=df_s["algorithm"]!="cmeans"
-df_s=df_s[no_cmeans]
-df_ch=df_ch[no_cmeans]
-df_db=df_db[no_cmeans]
-df_y=df_y[no_cmeans]
-df_s.drop(columns=["algorithm"],axis=1,inplace=True)'''
+df["config"] = df.apply(lambda x: x.name.split("_")[0],axis=1)
+df = df.sort_values(by = ["config"])
+df=df[df["true_y"]!=0]
+df["pred_y"] = None
 
 ru=8
 rc=16
@@ -124,79 +111,90 @@ c[0]=0; c[1]=0; c[2]=0;    c[3]=0; c[4]=0; c[5]=1; c[6]=0; c[7]=1;
 b[0]=0; b[1]=0;
 
 args={'u':u,'c':c,'b':b}
-#c_complejo=np.concatenate((u,c,b))
-#optimal_u={"_si":{'u':u,'c':c,'b':b}}
-all_df={"s":df_s,"ch":df_ch,"db":df_db,"bic":df_bic,"curv_m":df_cm,"xie_b":df_xb,"var_lr":df_vlr,
-        "gci45":df_gci_45,
-        "gci50":df_gci_50,
-        "y":df_y}
-crit=["s","ch","db", "bic", "curv_m", "xie_b", "var_lr"]
-crit_gci=["gci45","gci50"]
-#crit_gci=["gci45"]
+crit=['s', 'ch', 'db', 'sse', 'bic', 'xb', 'cv', 'vlr']
+crit_gci=["gci_0.45","gci_0.5"]
+
 col_crit=crit+crit_gci
-df=pd.DataFrame(columns=col_crit.copy().append("y"),index=df_s.index)
-df_flag=pd.DataFrame(columns=crit_gci,index=df_s.index)
 
-select_k_max= lambda x: np.nanargmax(x)+1
-select_k_min= lambda x: np.nanargmin(x)+1
-#select_k_vlr = lambda x: np.nanargmin(np.abs(x - 1)) +1
-select_k_vlr = lambda x: np.amax(np.array(x <= 1.0).nonzero())+1
-
-for name,df_ in all_df.items():
-  if name!="y" and ("gci" in name)==False:
-    if name=="db" or name=="xie_b":
-      df[name] = df_.apply(select_k_min,axis=1).values.reshape(-1,1)
-    elif name=="var_lr":
-      df[name] = df_.apply(select_k_vlr,axis=1).values.reshape(-1,1)
-    else:
-      df[name] = df_.apply(select_k_max,axis=1).values.reshape(-1,1)
-  elif "gci" in name:
-    pred_flag=df_.apply(lambda x: conds_score(gci_=x,id=x.name,**args),axis=1).values
-    flags=[]
-    preds=[]
-    for pf in pred_flag:
-        preds.append(pf[0])
-        flags.append(pf[1])
-    df[name]=preds
-    df_flag[name]=flags
-  else:
-    df[name] = df_.values.reshape(-1,1)
-
-df=df[df["y"]!=0]
-
-df["algorithm"]=df.apply(lambda x: x.name.split("-")[-1],axis=1)
+df_flag=pd.DataFrame(columns=crit_gci,index=df["s"].index)
+df["algorithm"]=df.apply(lambda x: x.name.split("-")[-1].split("_")[0],axis=1)
 no_cmeans=df["algorithm"]!="cmeans"
 df=df[no_cmeans]
 df.drop(columns=["algorithm"],axis=1,inplace=True)
 
+# Group by "config" and select best k for each group
+grouped = df.groupby("config")
+results = {}
+ 
+df_flag = pd.DataFrame(columns=crit_gci, index=df["config"].drop_duplicates())
+df_= pd.DataFrame(df,columns=col_crit,index=df.index)
 
-df_metrics=pd.DataFrame(columns=col_crit,index=["MAE","MSE","ACC"])
-#Global metrics
-for c in df.columns[:-1]:
-    df_metrics[c]= [mean_absolute_error(df[c],df["y"]),mean_squared_error(df[c],df["y"]),accuracy_score(df[c],df["y"])]
+for config, group in grouped:
+    print(config) 
+    u = np.zeros(ru)
+    c = np.zeros(rc - ru)
+    b = np.zeros(2)
+    
+    # Set the values of u, c, and b based on the group or args dictionary as needed
+    # For example, if you have specific u, c, and b values for each group, you can set them here.
+    
+    args = {'u': u, 'c': c, 'b': b}
+    
+
+    for c in col_crit:
+        
+        gc = pd.DataFrame(group[c])
+        
+        if c != "y" and ("gci" in c) == False:
+            if c == "db" or c == "xie_b":
+                pred_y  = gc.apply(select_k_min, axis=0).values.reshape(-1, 1)[0][0]
+            elif c == "var_lr":
+                pred_y = gc.apply(select_k_vlr, axis=0).values.reshape(-1, 1)[0][0]
+            else:
+                pred_y = gc.apply(select_k_max, axis=0).values.reshape(-1, 1)[0][0]
+        elif "gci" in c:
+            pred_flag = gc.apply(lambda x: conds_score(gci_=x, id=x.name, **args), axis=0).values.T
+            flags = []
+            preds = []
+            for pf in pred_flag:
+                preds.append(pf[0])
+                flags.append(pf[1])
+        
+            df_.loc[df["config"] == config, c] = preds[0]
+        else:
+           pred_y =  gc.values.reshape(-1, 1)
+
+        df_.loc[df["config"] == config, c] = np.abs(pred_y - group["true_y"][0])
 
 
-with open(ROOT+"/data/test/scenarios.txt") as f:
+        group_metrics = [
+            mean_absolute_error([pred_y], [group["true_y"][0]]),
+            mean_squared_error([pred_y], [group["true_y"][0]]),
+            accuracy_score([pred_y], [group["true_y"][0]])
+        ]
+    
+        results[config + "-" + c] = group_metrics
+
+df_results = pd.DataFrame(results, index=["MAE", "MSE", "ACC"]).T
+
+with open(ROOT+"/datasets/Escenarios.csv") as f:
     scenarios=f.readlines()
 
-df_= pd.DataFrame(np.abs(df.drop('y', axis=1).values - df.y.values.reshape(-1,1)),columns=col_crit,index=df.index)
-df_.head()
+df_["algorithm"]=df_.apply(lambda x: x.name.split("-")[-1].split("_")[0],axis=1)
+df_["dataset"]=df_.apply(lambda x: x.name.split("-")[0] if "blobs-" not in x.name else "blobs",axis=1)
+df_["dimensions"]=df_.apply(lambda x: "Control" if "blobs-" not in x.name else x.name.split("-")[-6],axis=1)
+df_["N"]=df_.apply(lambda x: "Control" if "blobs-" not in x.name else x.name.split("_")[0].split("-")[-4],axis=1)
+df_["scenario"]= df_.apply(lambda x: "Control" if "blobs-" not in x.name else "-".join(x.name.split("_")[0].split("-")[1:-1]),axis=1)
+df_["K"]=df_.apply(lambda x: "Control" if "blobs-" not in x.name else x.name.split("_")[0].split("-")[-5],axis=1)
+df_["dt"]=df_.apply(lambda x: "Control" if "blobs-" not in x.name else x.name.split("_")[0].split("-")[-3],axis=1)
+#df_["flags"]=np.asarray(flags)[no_cmeans]
+df_=df_[df_["algorithm"]!="cmeans"]
 
-df_["algorithm"]=df_.apply(lambda x: x.name.split("-")[-1],axis=1)
-df_["dataset"]=df_.apply(lambda x: x.name[:- (1+len(x["algorithm"]))] if "blobs-" not in x.name else ( x.name[:- (5+len(x["algorithm"]))] if "S10" in x.name else x.name[:- (4+len(x["algorithm"]))]) ,axis=1)
-#df_["seed"]=df_.apply(lambda x: "Control" if "blobs-" not in x.name else x.name.split("-")[-2],axis=1)
-df_["dimensions"]=df_.apply(lambda x: "Control" if "blobs-" not in x.name else x.dataset.split("-")[-4],axis=1)
-df_["N"]=df_.apply(lambda x: "Control" if "blobs-" not in x.name else x.dataset.split("-")[-2],axis=1)
-df_["scenario"]=np.asarray(scenarios)[no_cmeans]
-df_["K"]=df_.apply(lambda x: "Control" if "blobs-" not in x.name else x.dataset.split("-")[-3],axis=1)
-df_["dt"]=df_.apply(lambda x: "Control" if "blobs-" not in x.name else x.dataset.split("-")[-1],axis=1)
-df_["flags"]=np.asarray(flags)[no_cmeans]
+df_ = df_.drop_duplicates()
 
 acc = lambda x: len(np.where(x==0)[0])/len(x)
 mse = lambda x: np.mean(np.square(np.array(x)))
-
-df_=df_[df_["algorithm"]!="cmeans"]
-
+ 
 df_.drop(columns=["dataset","dimensions","N","scenario"],axis=1).groupby("algorithm").mean().to_excel(ROOT+"/out_files/F_mean_algo_"+id_sol+".xlsx")
 df_.drop(columns=["dataset"],axis=1).groupby(["scenario","algorithm"]).mean().to_excel(ROOT+"/out_files/F_mean_scen_algo_"+id_sol+".xlsx")
 df_.drop(columns=["dataset","algorithm","K"],axis=1).groupby(["scenario"]).mean().to_excel(ROOT+"/out_files/F_mean_scen_"+id_sol+".xlsx")
