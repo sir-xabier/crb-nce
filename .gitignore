@@ -162,5 +162,4 @@ cython_debug/
 
 results/
 out_files/
-datasets/
 test/
