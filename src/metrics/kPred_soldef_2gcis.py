@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 """
-
 Experimento para la detección del número de clusters, comparando GCI45 y 50 con las otras medidas.
 Incluye MSE además de Acc y MAE.
 Incluye test estadísticos para las 3 métricas.
@@ -83,6 +82,8 @@ select_k_max= lambda x: np.nanargmax(x)+1
 select_k_min= lambda x: np.nanargmin(x)+1
 #select_k_vlr = lambda x: np.nanargmin(np.abs(x - 1)) +1
 select_k_vlr = lambda x: np.amax(np.array(x <= 1.0).nonzero())+1
+acc = lambda x: len(np.where(x==0)[0])/len(x)
+mse = lambda x: np.mean(np.square(np.array(x)))
 
 
 #Data
@@ -113,22 +114,13 @@ b[0]=0; b[1]=0;
 args={'u':u,'c':c,'b':b}
 crit=['s', 'ch', 'db', 'sse', 'bic', 'xb', 'cv', 'vlr']
 crit_gci=["gci_0.45","gci_0.5"]
-
 col_crit=crit+crit_gci
 
-df_flag=pd.DataFrame(columns=crit_gci,index=df["s"].index)
-df["algorithm"]=df.apply(lambda x: x.name.split("-")[-1].split("_")[0],axis=1)
-no_cmeans=df["algorithm"]!="cmeans"
-df=df[no_cmeans]
-df.drop(columns=["algorithm"],axis=1,inplace=True)
-
-# Group by "config" and select best k for each group
-grouped = df.groupby("config")
-results = {}
- 
 df_flag = pd.DataFrame(columns=crit_gci, index=df["config"].drop_duplicates())
 df_= pd.DataFrame(df,columns=col_crit,index=df.index)
 
+
+grouped = df.groupby("config")
 for config, group in grouped:
     print(config) 
     u = np.zeros(ru)
@@ -144,8 +136,11 @@ for config, group in grouped:
     for c in col_crit:
         
         gc = pd.DataFrame(group[c])
+        gc["id"] = gc.apply(lambda x: int(x.name.split("_")[-1]), axis = 1)
+        gc = gc.sort_values(["id"])[:30].drop(columns=["id"])
+
         
-        if c != "y" and ("gci" in c) == False:
+        if ("gci" in c) == False:
             if c == "db" or c == "xie_b":
                 pred_y  = gc.apply(select_k_min, axis=0).values.reshape(-1, 1)[0][0]
             elif c == "var_lr":
@@ -153,49 +148,30 @@ for config, group in grouped:
             else:
                 pred_y = gc.apply(select_k_max, axis=0).values.reshape(-1, 1)[0][0]
         elif "gci" in c:
-            pred_flag = gc.apply(lambda x: conds_score(gci_=x, id=x.name, **args), axis=0).values.T
-            flags = []
-            preds = []
-            for pf in pred_flag:
-                preds.append(pf[0])
-                flags.append(pf[1])
-        
-            df_.loc[df["config"] == config, c] = preds[0]
-        else:
-           pred_y =  gc.values.reshape(-1, 1)
+            pred_y, flag = gc.apply(lambda x: conds_score(gci_= x, id= x.name, **args), axis= 0).values.T[0]
 
         df_.loc[df["config"] == config, c] = np.abs(pred_y - group["true_y"][0])
-
-
-        group_metrics = [
-            mean_absolute_error([pred_y], [group["true_y"][0]]),
-            mean_squared_error([pred_y], [group["true_y"][0]]),
-            accuracy_score([pred_y], [group["true_y"][0]])
-        ]
     
-        results[config + "-" + c] = group_metrics
-
-df_results = pd.DataFrame(results, index=["MAE", "MSE", "ACC"]).T
-
-with open(ROOT+"/datasets/Escenarios.csv") as f:
-    scenarios=f.readlines()
-
 df_["algorithm"]=df_.apply(lambda x: x.name.split("-")[-1].split("_")[0],axis=1)
-df_["dataset"]=df_.apply(lambda x: x.name.split("-")[0] if "blobs-" not in x.name else "blobs",axis=1)
-df_["dimensions"]=df_.apply(lambda x: "Control" if "blobs-" not in x.name else x.name.split("-")[-6],axis=1)
-df_["N"]=df_.apply(lambda x: "Control" if "blobs-" not in x.name else x.name.split("_")[0].split("-")[-4],axis=1)
-df_["scenario"]= df_.apply(lambda x: "Control" if "blobs-" not in x.name else "-".join(x.name.split("_")[0].split("-")[1:-1]),axis=1)
-df_["K"]=df_.apply(lambda x: "Control" if "blobs-" not in x.name else x.name.split("_")[0].split("-")[-5],axis=1)
-df_["dt"]=df_.apply(lambda x: "Control" if "blobs-" not in x.name else x.name.split("_")[0].split("-")[-3],axis=1)
-#df_["flags"]=np.asarray(flags)[no_cmeans]
 df_=df_[df_["algorithm"]!="cmeans"]
+
+df_["dataset"]=df_.apply(lambda x: x.name.split("-")[0] if "blobs-" not in x.name else "blobs",axis=1)
+
+df_["dimensions"]=df_.apply(lambda x: "Control" if "blobs-" not in x.name else x.name.split("-")[-6],axis=1)
+
+df_["N"]=df_.apply(lambda x: "Control" if "blobs-" not in x.name else x.name.split("_")[0].split("-")[-4],axis=1)
+
+df_["K"]=df_.apply(lambda x: "Control" if "blobs-" not in x.name else x.name.split("_")[0].split("-")[-5],axis=1)
+
+df_["dt"]=df_.apply(lambda x: "Control" if "blobs-" not in x.name else x.name.split("_")[0].split("-")[-3],axis=1)
+
+#df_["flags"]=np.asarray(flags)[no_cmeans]
+
+df_["scenario"]= df_.apply(lambda x: "Control" if "blobs-" not in x.name else "-".join(x.name.split("_")[0].split("-")[1:-1]),axis=1)
 
 df_ = df_.drop_duplicates()
 
-acc = lambda x: len(np.where(x==0)[0])/len(x)
-mse = lambda x: np.mean(np.square(np.array(x)))
- 
-df_.drop(columns=["dataset","dimensions","N","scenario"],axis=1).groupby("algorithm").mean().to_excel(ROOT+"/out_files/F_mean_algo_"+id_sol+".xlsx")
+df_.drop(columns=["dataset","dimensions","N","scenario", "dt", "K"],axis=1).groupby("algorithm").mean().to_excel(ROOT+"/out_files/F_mean_algo_"+id_sol+".xlsx")
 df_.drop(columns=["dataset"],axis=1).groupby(["scenario","algorithm"]).mean().to_excel(ROOT+"/out_files/F_mean_scen_algo_"+id_sol+".xlsx")
 df_.drop(columns=["dataset","algorithm","K"],axis=1).groupby(["scenario"]).mean().to_excel(ROOT+"/out_files/F_mean_scen_"+id_sol+".xlsx")
 df_.drop(columns=["dataset","algorithm","scenario"],axis=1).groupby(["dt"]).mean().to_excel(ROOT+"/out_files/F_mean_dt_"+id_sol+".xlsx")
@@ -399,14 +375,3 @@ sns.relplot(
     x="dt", y="MSE",
     hue="Method"
 )
-
-'''
-import numpy as np
-import os
-
-ROOT=os.getcwd()
-path=ROOT + "\data\weights\DG\\106\W_106_0.45.npy"
-peso=np.load(allow_pickle=True,file=path)
-
-1/106
-'''
