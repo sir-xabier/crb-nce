@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from tabulate import tabulate
+#from tabulate import tabulate
 from tqdm import tqdm
 
 import matplotlib.pyplot as plt
@@ -31,20 +31,26 @@ directory = "./results/"
 filenames = sorted(os.listdir(directory)) 
 metrics = load_header_as_str_array() #["s","ch","db","sse","bic","xb","cv","vlr","acc","rscore","adjrscore","gci_0.1","gci_medioid_0.1","gci_0.2","gci_medioid_0.2","gci_0.3","gci_medioid_0.3","gci_0.35","gci_medioid_0.35","gci_0.4","gci_medioid_0.4","gci_0.45","gci_medioid_0.45","gci_0.5","gci_medioid_0.5"]
 
-df = pd.DataFrame(index=[filename + f"_{k}" for k in range(1, 51) for filename in filenames], columns=metrics).T
+#1095 x 50 filas y 26 columnas (con y + true_y) 
+df = pd.DataFrame(columns=metrics).T
 for f in tqdm(range(len(filenames))):
-    filename = filenames[f][:-4]
+    filename = filenames[f][:-4] #se quita .npy
     raw = np.load(os.path.join(directory, filename + ".npy"), allow_pickle=True)
-    y_ = raw[:, len(metrics) - 1:]
-    df_ = pd.DataFrame(raw[:,: len(metrics) - 1], columns=metrics[:-1])
+    y_ = raw[:, len(metrics) - 1:] #todas las filas, columnas de la solución por puntos
+    df_ = pd.DataFrame(raw[:,: len(metrics) - 1], columns=metrics[:-1]) #metricas 
+    
+    #revisar, quizás no haga falta separar el caso no_structure
     if not "no_structure" == filename.split("-")[0]:
-        df_["true_y"] = df_.rscore.dropna().index[0]
+        df_["true_y"] = int(df_.rscore.dropna().index[0])+1 #esto ha cambiado, se tenía true_y=0 para K=1
+    else:
+        df_["true_y"] = 1
+   
     df_["y"] = y_.reshape(y_.shape[0], 1,y_.shape[1]).tolist()
     
     # Update the 'df' DataFrame with new indices
     df[[filename + f"_{i}" for i in range(1, 51)]] = df_.values.T
 
-df[:-1].T.to_csv(os.getcwd()+"/metrics.csv", index=True)
+df[:-1].T.to_csv(os.getcwd()+"/metrics.csv") #volver a poner metrics.csv
 
 dfy = pd.DataFrame(df.T.y.values.tolist(), index=df.T.index)
 

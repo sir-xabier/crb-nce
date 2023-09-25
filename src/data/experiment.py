@@ -18,9 +18,13 @@ import pandas as pd
 from scipy.spatial import distance
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans, AgglomerativeClustering
-from sklearn_extra.cluster import KMedoids
+#from sklearn_extra.cluster import KMedoids
 from sklearn.cluster import kmeans_plusplus
 from sklearn.metrics import rand_score, adjusted_rand_score
+from sklearn.metrics.pairwise import (
+    pairwise_distances,
+    pairwise_distances_argmin,
+)
 
 import sys
 sys.path.append("..")
@@ -31,6 +35,8 @@ from data.utils import global_covering_index, coverings, medioids, clust_acc
 from data.utils import silhouette_score, calinski_harabasz_score, davies_bouldin_score
 from data.utils import bic_fixed, curvature_method, variance_last_reduction, xie_beni_ts
 from data.utils import SSE
+
+from data.KMedoid import KMedoids
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -82,9 +88,15 @@ def Experiment(args):
     n = X.shape[0]
     
     if y.tolist() is None:
-        y=np.zeros(X.shape[0])
+        y=np.zeros(X.shape[0])            
 
-    true_k = np.unique(y).shape[0]
+
+#se pone y en no_structure
+    if 'no_structure' in args.dataset  :
+        true_k=1
+        y=np.zeros(X.shape[0])
+    else:
+        true_k = np.unique(y).shape[0]
     
     X = StandardScaler().fit_transform(X)
     distance_normalizer = 1/np.sqrt(25*X.shape[1])
@@ -94,13 +106,19 @@ def Experiment(args):
     clf = args.key
     config = args.value
     
+    #guarda el resultado del clustering a nivel predicciones de puntos
     df_y = pd.DataFrame(index=['y_' + str(i + 1) for i in range(y.shape[0])], columns = np.arange(1, args.kmax + 1))
+    
+    if clf.__name__ == "KMedoids":
+        D = pairwise_distances(X)
 
     for k in range(1, args.kmax + 1): 
         
         if clf.__name__ == "AgglomerativeClustering":
             clf_ = clf(n_clusters = k, **config)
             y_best_sol = clf_.fit_predict(X)
+            centroides=np.array([np.mean(X[y_best_sol==i],axis=0) for i in np.unique(np.arange(k))])
+            centros=centroides
         
         else:
             best_sol_err = np.inf
@@ -123,23 +141,33 @@ def Experiment(args):
                 else:
                     if clf.__name__ == "KMeans":
                         clf_=clf(n_clusters=k,init=c0,**config)
-                    else:
-                        clf_=clf(n_clusters=k,random_state=args.seed+i,**config)
-                    fitted=clf_.fit(X)
-                    y_pred=fitted.predict(X)
+                        fitted=clf_.fit(X)
+                    elif clf.__name__ == "KMedoids":
+                        clf_=clf(n_clusters=k,init=c0,**config)
+                        fitted=clf_.fit(X,D=D)
+                    
+                    y_pred=fitted.labels_
+                    #y_pred=fitted.predict(X)
                     this_err=fitted.inertia_
 
                 if this_err<best_sol_err:
                     best_sol_err=this_err
                     y_best_sol=y_pred
+                    centros=fitted.cluster_centers_
                 
         if y_best_sol is not None:
             
-            centroides=np.array([np.mean(X[y_best_sol==i],axis=0) for i in np.unique(np.arange(k))])
-            medioides=medioids(X,y_best_sol)
+            if clf.__name__ == "KMedoids":
+                centroides=np.array([np.mean(X[y_best_sol==i],axis=0) for i in np.unique(np.arange(k))])
+                U_medioid=coverings(X,centros,distance_normalizer=distance_normalizer)
+            elif clf.__name__ == "KMeans":
+                centroides=centros
             
-            U_medioid=coverings(X,medioides,distance_normalizer=distance_normalizer)
             U=coverings(X,centroides,distance_normalizer=distance_normalizer)
+            
+            #medioides=medioids(X,y_best_sol)    
+            #U_medioid=coverings(X,medioides,distance_normalizer=distance_normalizer)
+            #U=coverings(X,centroides,distance_normalizer=distance_normalizer)
             
             sse_=SSE(X,y_best_sol, centroides)
 
@@ -157,14 +185,21 @@ def Experiment(args):
             
             for orn in args.orness:
                 path=args.ROOT + "/weights/" + str(n) + "/W_" + str(n) + "_" + str(orn) + ".npy"  
-                df['gci_medioid_' + str(orn)][k] = global_covering_index(U_medioid,function='OWA',orness=orn,path=path)
-                df['gci_' + str(orn)][k] = global_covering_index(U,function='OWA',orness=orn,path=path)
+                if clf.__name__ == "KMedoids":
+                    df['gci_medioid_' + str(orn)][k] = global_covering_index(U_medioid,function='OWA',orness=orn,path=path)
+                    df['gci_' + str(orn)][k] = global_covering_index(U,function='OWA',orness=orn,path=path)
+                else:
+                    df['gci_' + str(orn)][k] = global_covering_index(U,function='OWA',orness=orn,path=path)
+                    df['gci_medioid_' + str(orn)][k] = df['gci_' + str(orn)][k]
 
             if k==true_k:
+                #print(y_best_sol,y)
                 df['acc'][k] = clust_acc(y, y_best_sol) 
                 df['rscore'][k] = rand_score(y, y_best_sol)
                 df['adjrscore'][k] = adjusted_rand_score(y, y_best_sol)  
-                                        
+    
+    if clf.__name__ == "KMedoids":
+       del D                             
     df['cv'][1:]=curvature_method(df['sse'][1:].values)
     
     header= df.columns
@@ -175,7 +210,7 @@ def Experiment(args):
 # Function to perform an experiment and save results
 def run_experiment(args):
     dataset_name=args.dataset.split("/")[-1][:-4]
-    exp_name = f"./results/{dataset_name}-{args.key.__name__}_{args.kmax}_{args.seed}.npy"
+    exp_name = f"./results/{dataset_name}-{args.key.__name__}_{args.n_init}_{args.kmax}_{args.seed}.npy"
     if os.path.exists(exp_name):
         pass
     else:
@@ -209,7 +244,7 @@ def main():
 
     parser.add_argument("--orness", type=int, default= [0.1, 0.2, 0.3, 0.35, 0.4, 0.45, 0.5], nargs = "?", help="Selected Orness") 
     parser.add_argument("--seed", type=int, default= 31416, help="Random Seed")
-    parser.add_argument("--n_init", type=int, default= 4, help="Number of executions of each algorithm")
+    parser.add_argument("--n_init", type=int, default= 10, help="Number of executions of each algorithm")
     parser.add_argument("--kmax", type=int, default= 50, help="Range of K")
     parser.add_argument("--maxiter", type=int, default= 100, help="Maximum iterations")
     
@@ -218,11 +253,19 @@ def main():
     #K-means ++ init
     args.kmeans_pp = lambda X,c,s: kmeans_plusplus(X, n_clusters=c, random_state=s)[0] 
 
-    classifiers = {
+    '''classifiers = {
         KMeans:{'max_iter':args.maxiter,'n_init':1,'random_state':args.seed},
         KMedoids:{'max_iter':args.maxiter,'init':'k-medoids++'},
         AgglomerativeClustering:{}
+    }'''
+    
+    classifiers = {
+        KMeans:{'max_iter':args.maxiter,'n_init':1,'random_state':args.seed},
+        KMedoids:{'max_iter':args.maxiter},
+        AgglomerativeClustering:{}
     }
+
+
 
     args.ROOT=os.getcwd()
 
@@ -248,6 +291,7 @@ def main():
 
     args.df = df
 
+    
     processes = []
     for k,v in classifiers.items():
         args.key= k
@@ -258,7 +302,30 @@ def main():
         
     for process in processes:
         process.join()
-         
-       
+
+    """
+    directory = "./datasets/synthetic"
+    filenames = sorted(os.listdir(directory))
+    '''filenames=['blobs-P18-K25-N10000-dt0.34-S2.npy']'''
+    print(filenames)
+    for file in filenames:
+        args.dataset=directory + '/' + file
+        for k,v in classifiers.items():
+            args.key= k
+            args.value= v
+            run_experiment(args)
+        
+        
+        
+        ''' #comentado porque no me funciona el multiprocessing
+        process = multiprocessing.Process(target=run_experiment, args=(args,))
+        processes.append(process)
+        process.start()
+        
+    for process in processes:
+        process.join()
+         '''
+    """
+           
 if __name__=="__main__":
     main()
