@@ -166,6 +166,7 @@ cython_debug/
 datasets/
 genetic/
 results/
+out_files/
 
 # Specific files to ignore
 best_solutions.csv
