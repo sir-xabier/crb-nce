@@ -339,8 +339,8 @@ def generate_train_data(path, dim=2, k_low=1, k_high=10, n_samples=500, n_blobs=
             trend_1[:, i] = first_derivative[:, i] / np.amax(first_derivative[:, i + 1:], axis=1)
             trend_2[:, i] = second_derivative[:, i] / np.amin(second_derivative[:, i + 1:], axis=1)
 
-        argmax_1 = np.argmax(trend_1, axis=1)
-        argmax_2 = np.argmax(trend_2, axis=1)
+        argmax_1 = np.argmax(trend_1[:,:], axis=1)
+        argmax_2 = np.argmax(trend_2[:,:], axis=1)
 
         np.save(os.path.join(path, f"{index}_trd1_{suffix}{file_suffix}.npy"), trend_1)
         np.save(os.path.join(path, f"{index}_trd2_{suffix}{file_suffix}.npy"), trend_2)

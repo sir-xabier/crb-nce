@@ -50,11 +50,11 @@ def main():
     Main function to process `.npy` files, generate metrics, and save results.
     """
     directory = "./results/"
-    output_metrics_file = os.path.join("./metrics.csv")
-    output_solutions_file = os.path.join("./best_solutions.csv")
+    output_metrics_file = os.path.join("./out_files/metrics.csv")
+    output_solutions_file = os.path.join("./out_files/best_solutions.csv")
 
     # Load metrics
-    metrics = load_header_as_str_array()
+    metrics = load_header_as_str_array(header_file="./datasets/header.txt")
     if not metrics:
         print("Cannot proceed without header metrics.")
         return None

@@ -14,7 +14,7 @@ ROOT_PATH = "./datasets/"
 
 # File suffix and identifier
 SUFFIX = "20blobs15K37S200"
-INDEX = 'gci2'
+INDEX = 'gci'
 
 # Load training and validation data
 TRAINING_FILES = [
