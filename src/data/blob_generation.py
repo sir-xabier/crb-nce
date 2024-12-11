@@ -385,5 +385,5 @@ if __name__ == "__main__":
     
     generate_test_data(path="./datasets/")
     
-    generate_train_data(path = "./datasets/train", initial_seed=initial_seed + n_blobs, n_blobs=n_blobs, k_max=k_max, max_pred=max_pred, suffix=suffix)
+    generate_train_data(path = "./datasets/train", initial_seed=initial_seed, n_blobs=n_blobs, k_max=k_max, max_pred=max_pred, suffix=suffix)
     generate_train_data(path = "./datasets/val", val=True, initial_seed=initial_seed + n_blobs, n_blobs=n_blobs, k_max=k_max, max_pred=max_pred, suffix=suffix) 
