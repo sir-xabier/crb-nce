@@ -166,10 +166,6 @@ datasets/
 # Ignore results folder content
 results/
 
-# Additional directories and files to ignore
-out_files/
-test/
-
 # Specific files to ignore
 best_solutions.csv
 metrics.csv
