@@ -1,70 +1,99 @@
 import numpy as np
-import pandas as pd
-#from tabulate import tabulate
+import pandas as pd 
 from tqdm import tqdm
-
-import matplotlib.pyplot as plt
-import seaborn as sns
-
 import os
-import warnings
-warnings.filterwarnings("ignore") # Mesa Drivers warning
 
-def load_header_as_str_array():
-    header_path = os.path.join(os.getcwd(), "header.txt")
+def load_header_as_str_array(header_file="header.txt"):
+    """
+    Load header metrics from a text file and append additional columns.
+
+    :param header_file: Filename of the header file.
+    :return: List of metric names or None if the file is not found.
+    """
+    header_path = os.path.join(os.getcwd(), header_file)
     if os.path.exists(header_path):
         with open(header_path, "r") as file:
             header_str = file.read()
             header_array = header_str.splitlines()
-            header_array.append("true_y")
-            header_array.append("y")
+            header_array.extend(["true_y", "y"])
         return header_array
     else:
-        print("Header file 'header.txt' not found.")
+        print(f"Header file '{header_file}' not found.")
         return None
-    
-sns.set(style="darkgrid")
+     
 
-directory = "./results/"
+def process_file(file_path, metrics, filename):
+    """
+    Process a single `.npy` file and return the formatted DataFrame.
 
+    :param file_path: Path to the `.npy` file.
+    :param metrics: List of metric names.
+    :param filename: Name of the file (without extension).
+    :return: Processed DataFrame for the file.
+    """
+    raw_data = np.load(file_path, allow_pickle=True)
+    y_ = raw_data[:, len(metrics) - 1:]   
+    df_ = pd.DataFrame(raw_data[:, :len(metrics) - 1], columns=metrics[:-1])   
 
-filenames = sorted(os.listdir(directory)) 
-metrics = load_header_as_str_array() #["s","ch","db","sse","bic","xb","cv","vlr","acc","rscore","adjrscore","gci_0.1","gci_medioid_0.1","gci_0.2","gci_medioid_0.2","gci_0.3","gci_medioid_0.3","gci_0.35","gci_medioid_0.35","gci_0.4","gci_medioid_0.4","gci_0.45","gci_medioid_0.45","gci_0.5","gci_medioid_0.5"]
-
-#1095 x 50 filas y 26 columnas (con y + true_y) 
-df = pd.DataFrame(columns=metrics).T
-for f in tqdm(range(len(filenames))):
-    filename = filenames[f][:-4] #se quita .npy
-    raw = np.load(os.path.join(directory, filename + ".npy"), allow_pickle=True)
-    y_ = raw[:, len(metrics) - 1:] #todas las filas, columnas de la solución por puntos
-    df_ = pd.DataFrame(raw[:,: len(metrics) - 1], columns=metrics[:-1]) #metricas 
-    
-    #revisar, quizás no haga falta separar el caso no_structure
-    if not "no_structure" == filename.split("-")[0]:
-        df_["true_y"] = int(df_.rscore.dropna().index[0])+1 #esto ha cambiado, se tenía true_y=0 para K=1
+    if filename.split("-")[0] != "no_structure":
+        # Set `true_y` to the index of the first non-NaN 'rscore' plus 1
+        df_["true_y"] = int(df_.rscore.dropna().index[0]) + 1
     else:
         df_["true_y"] = 1
-   
-    df_["y"] = y_.reshape(y_.shape[0], 1,y_.shape[1]).tolist()
+
+    # Add the solution column as a list
+    df_["y"] = y_.reshape(y_.shape[0], 1, y_.shape[1]).tolist()
+    return df_
+
+def main():
+    """
+    Main function to process `.npy` files, generate metrics, and save results.
+    """
+    directory = "./results/"
+    output_metrics_file = os.path.join("./metrics.csv")
+    output_solutions_file = os.path.join("./best_solutions.csv")
+
+    # Load metrics
+    metrics = load_header_as_str_array()
+    if not metrics:
+        print("Cannot proceed without header metrics.")
+        return None
+
+    # List `.npy` files in the results directory
+    filenames = sorted(os.listdir(directory))
     
-    # Update the 'df' DataFrame with new indices
-    df[[filename + f"_{i}" for i in range(1, 51)]] = df_.values.T
+    # Initialize DataFrame
+    df = pd.DataFrame(columns=metrics).T
 
-df[:-1].T.to_csv(os.getcwd()+"/metrics.csv") #volver a poner metrics.csv
+    # Process each file
+    for f in tqdm(filenames, desc="Processing files"):
+        filename = f[:-4]  # Remove `.npy` extension
+        file_path = os.path.join(directory, f)
+        try:
+            df_ = process_file(file_path, metrics, filename)
 
-dfy = pd.DataFrame(df.T.y.values.tolist(), index=df.T.index)
+            # Update the DataFrame with new indices
+            df[[f"{filename}_{i}" for i in range(1, 51)]] = df_.values.T
+        except Exception as e:
+            print(f"Failed to process file {f}: {e}")
 
-del df, df_, y_
+    # Save metrics to CSV
+    df[:-1].T.to_csv(output_metrics_file)
+    
+    # Extract and save best solutions
+    dfy = pd.DataFrame(df.T.y.values.tolist(), index=df.T.index)    
 
+    """  CRASHES DUE TO LACK OF MEMORY
+    dfy = (pd.DataFrame(dfy[0].values.tolist(), index=dfy.T.index)
+            .rename(columns = lambda x: f'y{x+1}'))
+    """
 
-""" CRASHEA POR FALTA DE MEMORIA
-dfy = (pd.DataFrame(dfy[0].values.tolist(), index=dfy.T.index)
-         .rename(columns = lambda x: f'y{x+1}'))
-"""
+    dfy.to_csv(output_solutions_file, index=True)
+     
 
-dfy.to_csv(os.getcwd()+"/best_solutions.csv", index=True)
-
-
-
-
-
+if __name__ == "__main__":
+    main()
+     
+ 
+ 
+ 

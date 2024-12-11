@@ -1,136 +1,221 @@
-from sklearn import datasets
-import numpy as np
-import pandas as pd
-import time
 import os
 import json
-import numpy as np
-from scipy.spatial import distance
 import warnings
+from typing import Generator, List, Tuple, Union
+
+import numpy as np
+import pandas as pd
+from scipy.spatial import distance
+from sklearn import datasets
+
+from utils import (
+    global_covering_index, coverings_vect, coverings_vect_square, SSE
+)
+
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans
+
+
+# Suppress warnings
 warnings.filterwarnings("ignore")
 
 class NumpyEncoder(json.JSONEncoder):
-    def default(self, obj):
+    """
+    Custom JSON encoder for handling NumPy arrays.
+    """
+    def default(self, obj: Union[np.ndarray, object]) -> Union[list, object]:
         if isinstance(obj, np.ndarray):
             return obj.tolist()
-        return json.JSONEncoder.default(self, obj)
+        return super().default(obj)
 
-def get_dataframe_from_dat(file):
-    for i in open(file).readlines():
-        if i[0]!="@":
-            row= i.split(",")
-            y=row[-1]
-            yield list(map(float, row[:-1]))+ [y[:-1]]
+def generate_scenario(
+    n_blobs: int = 10,
+    k_low: int = 1,
+    k_high: int = 1,
+    p_low: int = 2,
+    p_high: int = 2,
+    s_low: float = 1.0,
+    s_high: float = 1.0,
+    n_samples: int = 500,
+    initial_seed: int = 0,
+    get_class: bool = True
+) -> Tuple[List[str], List[Tuple[np.ndarray, np.ndarray]]]:
+    """
+    Generate a synthetic dataset with varying scenarios.
 
-def generate_scenario(n_blobs=10,kl=1,ku=1,pl=2,pu=2,sl=1,su=1,N=500,
-                      initial_seed=0,get_class=True):
-    data=[]
-    n_clases=[]
-    names=[]
-    if su==0.5: 
-        iter_s=[0.3,0.32,0.34,0.36,0.38,0.4,0.425,0.45,0.475,0.5]
-    elif sl==1 and su==1:
-        iter_s=[1 for i in range(n_blobs)]
+    :param n_blobs: Number of blobs to generate.
+    :param k_low: Minimum number of clusters.
+    :param k_high: Maximum number of clusters.
+    :param p_low: Minimum number of dimensions.
+    :param p_high: Maximum number of dimensions.
+    :param s_low: Minimum scaling factor.
+    :param s_high: Maximum scaling factor.
+    :param n_samples: Number of samples per blob.
+    :param initial_seed: Random seed for reproducibility.
+    :param get_class: Whether to include class labels.
+    :return: A tuple containing blob names and generated data.
+    """
+    data = []
+    class_counts = []
+    names = []
+
+    rng = np.random.default_rng(seed=initial_seed)
+
+    if s_high == 0.5:
+        scaling_factors = [0.3,0.32,0.34,0.36,0.38,0.4,0.425,0.45,0.475,0.5]
+    elif s_low == 1.0 and s_high == 1.0:
+        scaling_factors = [1.0] * n_blobs
     else:
-        iter_s=np.arange(sl,su,(su-sl)/n_blobs)
-    for i,dt in enumerate(iter_s):
-        K=rng.integers(kl,ku,endpoint=True)
-        P=rng.integers(pl,pu,endpoint=True)
-        centros=np.zeros(shape=(K,P))
-        for k in range(K):
-            centro=rng.integers(1,K,endpoint=True,size=(1,P))
-            if k == 0:
-                centros[k,:]=centro
+        scaling_factors = np.linspace(s_low, s_high, n_blobs)
+
+    for i, scale in enumerate(scaling_factors):
+        n_clusters = rng.integers(k_low, k_high + 1)
+        n_features = rng.integers(p_low, p_high + 1)
+        
+        centers = np.zeros(shape = (n_clusters, n_features))
+        for k in range(n_clusters):
+            center=rng.integers(1,n_clusters,endpoint=True,size=(1,n_features))
+            if k== 0:
+                centers[k,:] = center
             else:
                 igual=True
                 while igual:
-                    if np.any(np.all(centros==np.repeat(centro,K,axis=0),axis=1)):
-                        centro=rng.integers(1,K,endpoint=True,size=(1,P))
+                    if np.any(np.all(centers==np.repeat(center,n_clusters,axis=0),axis=1)):
+                        center=rng.integers(1,n_clusters,endpoint=True,size=(1,n_features))
                     else:
-                        centros[k,:]=centro
+                        centers[k,:]=center
                         igual=False
-                
-        centros=centros-0.5
-        r=np.amin(distance.cdist(centros,centros)+np.identity(K)*K*np.sqrt(P))
-        blobs=datasets.make_blobs(n_samples=N,centers=centros,cluster_std=r*dt,
-                                  random_state=initial_seed+i)
-        data.append(blobs) if get_class else data.append(blobs[0])
-        names.append('blobs-P'+str(P)+'-K'+str(K)+'-N'+str(N)+'-dt'+format(dt,"g")+'-S'+str(i))
-        n_clases.append(K)
-    
-    if not get_class:
-        return data,names,n_clases
-    else: 
-        return names,data
-    
-def generate_blobs(n_blobs=10,k_low=1,k_high=10,dim=2,n_samples=500,initial_seed=1,get_class=False,inter=1):
-
-    data=[]
-    n_clases=[]
-    names=[]
-    for i in range(k_low,k_high+1,inter):
-        for n in (np.arange(n_blobs)):
-            blobs = datasets.make_blobs(n_samples=n_samples,
-                                        n_features=dim,
-                                        centers=i,
-                                        random_state=initial_seed+n) 
-            data.append(blobs) if get_class else data.append(blobs[0]) 
-            names.append('blobs-P'+str(dim)+'-K'+str(i)+'-N'+str(n_samples)+'-S'+str(n+1))
-            n_clases.append(i)
         
-    if not get_class:
-        return data,names,n_clases
-    else: 
-        return names,data
+        centers=centers-0.5
+        
+        min_dist = np.amin(distance.cdist(centers,centers) + np.identity(n_clusters) * n_clusters * np.sqrt(n_features))
+        
+        # Create blob
+        blobs = datasets.make_blobs(
+            n_samples=n_samples,
+            centers=centers,
+            cluster_std=min_dist * scale,
+            random_state=initial_seed + i
+        )
+        data.append(blobs if get_class else blobs[0])
+        names.append(
+            f"blobs-P{n_features}-K{n_clusters}-N{n_samples}-dt{scale:.2f}-S{i}"
+        )
+        class_counts.append(n_clusters)
+
+    return (names, data) if get_class else (data, names, class_counts)
 
 
-def generate_test_data(path, n_samples=500, n_blobs= 10, initial_seed= 500, random_state=131416):
-  
+def generate_blobs(
+    n_blobs: int = 10,
+    k_low: int = 1,
+    k_high: int = 10,
+    n_features: int = 2,
+    n_samples: int = 500,
+    initial_seed: int = 1,
+    get_class: bool = False,
+    interval: int = 1
+) -> Tuple[List[str], List[Tuple[np.ndarray, np.ndarray]]]:
+    """
+    Generate synthetic blobs for clustering.
+
+    :param n_blobs: Number of blobs to generate.
+    :param k_low: Minimum number of clusters.
+    :param k_high: Maximum number of clusters.
+    :param n_features: Number of dimensions/features.
+    :param n_samples: Number of samples per blob.
+    :param initial_seed: Random seed for reproducibility.
+    :param get_class: Whether to include class labels.
+    :param interval: Step interval for the number of clusters.
+    :return: A tuple containing blob names and generated data.
+    """
+    data = []
+    class_counts = []
+    names = []
+
+    for n_clusters in range(k_low, k_high + 1, interval):
+        for blob_id in range(n_blobs):
+            blobs = datasets.make_blobs(
+                n_samples=n_samples,
+                n_features=n_features,
+                centers=n_clusters,
+                random_state=initial_seed + blob_id
+            )
+            data.append(blobs if get_class else blobs[0])
+            names.append(
+                f"blobs-P{n_features}-K{n_clusters}-N{n_samples}-S{blob_id + 1}"
+            )
+            class_counts.append(n_clusters)
+
+    return (names, data) if get_class else (data, names, class_counts)
+
+
+
+def save_dataset(path, filename, X, y):
+    """
+    Save dataset as a NumPy .npy file.
+
+    :param path: Directory path to save the file.
+    :param filename: Name of the file (without extension).
+    :param X: Feature matrix.
+    :param y: Target vector.
+    """
+    os.makedirs(path, exist_ok=True)
+    file_path = os.path.join(path, f"{filename}.npy")
+    np.save(file_path, np.concatenate((X, y), axis=1))
+
+def generate_synthetic_datasets(path, n_samples, random_state):
+    """
+    Generate and save synthetic datasets.
+
+    :param path: Directory path to save the datasets.
+    :param n_samples: Number of samples per dataset.
+    :param random_state: Seed for reproducibility.
+    """
+
+    # Circles dataset
     X, y = datasets.make_circles(n_samples=n_samples, factor=0.5, noise=0.05)
-    y = y.reshape(-1, 1)
-    np.save(path + "circles.npy", np.concatenate((X, y), axis=1))
+    save_dataset(path, "circles", X, y.reshape(-1, 1))
     
+    # Moons dataset
     X, y = datasets.make_moons(n_samples=n_samples, noise=0.05)
-    y = y.reshape(-1, 1)
-    np.save(path + "moons.npy", np.concatenate((X, y), axis=1))
+    save_dataset(path, "moons", X, y.reshape(-1, 1))
     
+    # Random no-structure dataset
     X = np.random.rand(n_samples, 2)
-    np.save(path + "no_structure.npy", X)
+    save_dataset(path, "no_structure", X, np.zeros((n_samples, 1)))
     
-    transformation = [[0.6, -0.6], [-0.4, 0.8]]
+    # Anisotropic blobs
+    transformation = np.array([[0.6, -0.6], [-0.4, 0.8]])
     X, y = datasets.make_blobs(n_samples=n_samples, random_state=random_state)
     X = np.dot(X, transformation)
-    y = y.reshape(-1, 1)
-    np.save(path + "aniso.npy", np.concatenate((X, y), axis=1))
+    save_dataset(path, "aniso", X, y.reshape(-1, 1))
     
-    X, y = datasets.make_blobs(n_samples=n_samples, cluster_std=[1.0, 2.5, 0.5], random_state=random_state)
-    y = y.reshape(-1, 1)
-    np.save(path + "varied.npy", np.concatenate((X, y), axis=1))
-    
-    """
-    X, y = datasets.make_blobs(n_samples=n_samples, random_state=random_state)
-    y = y.reshape(-1, 1)
-    np.save(path + "blobs_3.npy", np.concatenate((X, y), axis=1))
-    """
+    # Varied blob sizes
+    X, y = datasets.make_blobs(
+        n_samples=n_samples, cluster_std=[1.0, 2.5, 0.5], random_state=random_state
+    )
+    save_dataset(path, "varied", X, y.reshape(-1, 1))
 
-    # 2. Datasets reales
-    X, y = datasets.load_iris(return_X_y=True)
-    y = y.reshape(-1, 1)
-    np.save(path + "iris.npy", np.concatenate((X, y), axis=1))
+def generate_real_datasets(path):
+    """
+    Load and save real-world datasets.
+
+    :param path: Directory path to save the datasets.
+    """ 
     
-    X, y = datasets.load_digits(return_X_y=True)
-    y = y.reshape(-1, 1)
-    np.save(path + "digits.npy", np.concatenate((X, y), axis=1))
+    datasets_to_load = {
+        "iris": datasets.load_iris,
+        "digits": datasets.load_digits,
+        "wine": datasets.load_wine,
+        "breast_cancer": datasets.load_breast_cancer
+    }
     
-    X, y = datasets.load_wine(return_X_y=True)
-    y = y.reshape(-1, 1)
-    np.save(path + "wine.npy", np.concatenate((X, y), axis=1))
-    
-    X, y = datasets.load_breast_cancer(return_X_y=True)
-    y = y.reshape(-1, 1)
-    np.save(path + "bcancer.npy", np.concatenate((X, y), axis=1))
-    
-    """ # Lo comento porque ya no tengo los archivos en formato .dat y tengo todos en .npy
+    for name, loader in datasets_to_load.items():
+        X, y = loader(return_X_y=True)
+        save_dataset(path, name, X, y.reshape(-1, 1))
+        
+    """ I comment this because I no longer have the files in .dat format and I have them all in .npy format.
     real_path = "./datasets/real/"
     for file in os.listdir(real_path):
         generator = get_dataframe_from_dat(real_path  + file)
@@ -144,70 +229,156 @@ def generate_test_data(path, n_samples=500, n_blobs= 10, initial_seed= 500, rand
         np.save(path + file.split(".")[0] + ".npy", np.concatenate((X, y), axis=1))
     """
     
+def generate_scenario_datasets(path, n_blobs, initial_seed, scenarios_file):
+    """
+    Generate and save datasets based on scenario configurations.
 
-    # 1. Datasets artificiales
-    # Blobs
+    :param path: Directory path to save the datasets.
+    :param n_blobs: Number of blobs per scenario.
+    :param initial_seed: Seed for reproducibility.
+    :param scenarios_file: Path to the CSV file with scenario configurations.
+    """
+    scenarios = pd.read_csv(path.replace("blobs/", scenarios_file))
     
-    scenarios = pd.read_csv("./datasets/Escenarios.csv")
-
     for j,row in enumerate(scenarios.iterrows()):
-        blobs_=generate_scenario(n_blobs=n_blobs,
-                                 kl=row[1]['kl'],ku=row[1]['ku'],
-                                 pl=row[1]['pl'],pu=row[1]['pu'],
-                                 sl=row[1]['sl'],su=row[1]['su'],
-                                 N=row[1]['n'],
-                                 initial_seed=initial_seed+j*n_blobs)
+        scenario_data = generate_scenario(
+            n_blobs=n_blobs,
+            k_low=row[1]['kl'], k_high=row[1]['ku'],
+            p_low=row[1]['pl'], p_high=row[1]['pu'],
+            s_low=row[1]['sl'], s_high=row[1]['su'],
+            n_samples=row[1]['n'],
+            initial_seed=initial_seed + j * n_blobs
+        )
         
-        for i,key in enumerate(blobs_[0]):
-            X, y = blobs_[1][i]
-            y = y.reshape(-1, 1)
-            np.save(path + key + ".npy", np.concatenate((X, y), axis=1))
+        for i, key in enumerate(scenario_data[0]):
+            X, y = scenario_data[1][i]
+            save_dataset(path, key, X, y.reshape(-1, 1))
+            
+    
+def generate_train_data(path, dim=2, k_low=1, k_high=10, n_samples=500, n_blobs=10,
+                        max_K=30, initial_seed=1, val=False, suffix=None, max_pred=28):
+    """
+    Generates training data and computes clustering metrics such as SSE, GCI, and inertia.
+
+    Parameters:
+    dim (int): Dimensionality of the data.
+    k_low (int): Minimum number of clusters.
+    k_high (int): Maximum number of clusters.
+    n_samples (int): Number of samples per blob.
+    n_blobs (int): Number of data blobs.
+    max_K (int): Maximum number of clusters to evaluate.
+    initial_seed (int): Random seed for reproducibility.
+    val (bool): If True, saves validation datasets.
+    suffix (str): Suffix for saved file names.
+    max_pred (int): Maximum number of predictions.
+
+    Returns:
+    None
+    """
+
+    data, names, y = generate_blobs(n_features=dim, k_low=k_low, k_high=k_high, n_samples=n_samples,
+                                    n_blobs=n_blobs, initial_seed=initial_seed, get_class=False)
+    classifiers = [KMeans]
+
+    N = len(data)
+    K = range(1, max_K + 1)
+
+    # Initialize metrics arrays
+    sse = np.zeros((N, len(K) + 1))
+    sse[:, -1] = np.array(y)
+
+    inertia = np.zeros((N, len(K) + 1))
+    inertia[:, -1] = np.array(y)
+
+    amplitude = 2 * np.log(10)
+    gci = np.zeros((N, len(K) + 1))
+    gci[:, -1] = np.array(y)
+
+    gci2 = np.zeros((N, len(K) + 1))
+    gci2[:, -1] = np.array(y)
+    
+    for i_d, dataset in enumerate(data):
+        X = StandardScaler().fit_transform(dataset)
+        distance_normalizer = 1 / np.sqrt(25 * X.shape[1])
+
+        for clf in classifiers:
+            for k in K:
+                model = clf(n_clusters=k, random_state=31416)
+                labels = model.fit_predict(X)
+                centroids = model.cluster_centers_
+                
+                inertia[i_d, k - 1] = model.inertia_
+                sse[i_d, k - 1] = SSE(X, labels, centroids)
+   
+                u = coverings_vect(X, centroids, labels, a=amplitude, distance_normalizer=distance_normalizer)
+                u2 = coverings_vect_square(X, centroids, labels, a=amplitude, distance_normalizer=distance_normalizer)
+                
+                gci[i_d,k-1]=global_covering_index(u,function='mean', mode = 0)
+                gci2[i_d,k-1] = global_covering_index(u2,function='mean', mode = 0)
+
+    def save_data(file_name, data):
+        pd.DataFrame(data, columns=np.arange(len(K) + 1), index=names).to_csv(file_name)
+        np.save(file_name.replace('.csv', '.npy'), data)
+
+    file_suffix = "_val" if val else ""
+
+    # Save metrics
+    for metric, metric_data in zip(["inertia", "sse", "gci", "gci2"], [inertia, sse, gci, gci2]):
+        save_data(os.path.join(path, f"{metric}_{suffix}{file_suffix}.csv"), metric_data)
+
+    # Compute and save trends
+    for index, metric_data in {"sse": sse, "gci": gci, "gci2": gci2}.items():
+        metric_data = metric_data[:, :-1]
+        first_derivative = -1 * np.diff(metric_data, axis=1) if index == 'sse' else np.diff(metric_data, axis=1)
+        second_derivative = np.diff(first_derivative, axis=1)
+
+        trend_1 = np.zeros((N, max_pred - 2))
+        trend_2 = np.zeros((N, max_pred - 2))
+
+        for i in range(max_pred - 2):
+            trend_1[:, i] = first_derivative[:, i] / np.amax(first_derivative[:, i + 1:], axis=1)
+            trend_2[:, i] = second_derivative[:, i] / np.amin(second_derivative[:, i + 1:], axis=1)
+
+        argmax_1 = np.argmax(trend_1, axis=1)
+        argmax_2 = np.argmax(trend_2, axis=1)
+
+        np.save(os.path.join(path, f"{index}_trd1_{suffix}{file_suffix}.npy"), trend_1)
+        np.save(os.path.join(path, f"{index}_trd2_{suffix}{file_suffix}.npy"), trend_2)
+        np.save(os.path.join(path, f"{index}_am1_{suffix}{file_suffix}.npy"), argmax_1)
+        np.save(os.path.join(path, f"{index}_am2_{suffix}{file_suffix}.npy"), argmax_2)
+
+        print(f"Train datasets for index {index} saved at: {path}")
+
+
+def generate_test_data(
+    path, n_samples=500, n_blobs=10, initial_seed=500, random_state=131416, scenarios_file="scenarios.csv"
+):
+    """
+    Generate and save synthetic, real-world, and scenario-based test datasets.
+
+    :param path: Directory path to save all datasets.
+    :param n_samples: Number of samples for synthetic datasets.
+    :param n_blobs: Number of blobs for scenario-based datasets.
+    :param initial_seed: Seed for scenario generation.
+    :param random_state: Seed for synthetic datasets.
+    :param scenarios_file: Path to the CSV file with scenario configurations.
+    """ 
+    
+    # Generate synthetic datasets
+    generate_synthetic_datasets(path + "control/", n_samples, random_state)
+    
+    # Generate real-world datasets
+    generate_real_datasets(path + "control/")
+    
+    # Generate scenario-based datasets
+    generate_scenario_datasets(path + "blobs/", n_blobs, initial_seed, scenarios_file)
+     
     
 if __name__ == "__main__":
-
     rng = np.random.default_rng(1)
-    generate_test_data(n_samples=500,random_state=131416, initial_seed= 500, path="./datasets/synthetic/")
-
-
-
-""" # Antiguos Blobs sin desviación      
-# Escenario 1: p=2 | k=1-10 | n=500
-blobs_ = generate_blobs(dim=2, k_low=1, k_high=10, n_samples=n_samples, n_blobs=10, initial_seed=initial_seed, get_class=True)
-
-for i, key in enumerate(blobs_[0]):
-    X, y = blobs_[1][i]
-    y = y.reshape(-1, 1)
-    np.save(path + key + ".npy", np.concatenate((X, y), axis=1))
-
-# Escenario 2: p=10 | k=1-10 | n=500
-blobs_ = generate_blobs(dim=10, k_low=1, k_high=10, n_samples=n_samples, n_blobs=10, initial_seed=initial_seed, get_class=True)
-
-for i, key in enumerate(blobs_[0]):
-    X, y = blobs_[1][i]
-    y = y.reshape(-1, 1)
-    np.save(path + key + ".npy", np.concatenate((X, y), axis=1))
-
-# Escenario 3: : p=50 | k=1-10 | n=500
-blobs_ = generate_blobs(dim=50, k_low=1, k_high=10, n_samples=n_samples, n_blobs=10, initial_seed=initial_seed, get_class=True)
-
-for i, key in enumerate(blobs_[0]):
-    X, y = blobs_[1][i]
-    y = y.reshape(-1, 1)
-    np.save(path + key + ".npy", np.concatenate((X, y), axis=1))
-
-# Escenario 4: p=2 | k=5-25 | n=1250
-blobs_ = generate_blobs(dim=2, k_low=5, k_high=25, n_samples=1250, n_blobs=5, initial_seed=initial_seed, get_class=True, inter=5)
-
-for i, key in enumerate(blobs_[0]):
-    X, y = blobs_[1][i]
-    y = y.reshape(-1, 1)
-    np.save(path + key + ".npy", np.concatenate((X, y), axis=1))
-
-# Escenario 5: p=50 | k=5-25 | n=10000
-blobs_ = generate_blobs(dim=50, k_low=5, k_high=25, n_samples=10000, n_blobs=5, initial_seed=initial_seed, get_class=True, inter=5)
-
-for i, key in enumerate(blobs_[0]):
-    X, y = blobs_[1][i]
-    y = y.reshape(-1, 1)
-    np.save(path + key + ".npy", np.concatenate((X, y), axis=1))
-"""
+    initial_seed=200
+    n_blobs=20
+    
+    generate_test_data(path="./datasets/")
+    generate_train_data(path = "./datasets/train", initial_seed=initial_seed)
+    generate_train_data(path = "./datasets/val", val=True, initial_seed=initial_seed + n_blobs) 
