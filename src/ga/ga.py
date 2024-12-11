@@ -2,83 +2,71 @@ import os
 
 import numpy as np
 import random
+import pandas as pd
+
+import matplotlib.pyplot as plt
+
 from tqdm import tqdm
-from deap import base
-from deap import creator
-from deap import tools
+from deap import base, creator, tools
 
-root_path=os.getcwd()
+# Set root directory
+ROOT_PATH = "./datasets/"
 
-sufijo="20blobs15K37S200"
+# File suffix and identifier
+SUFFIX = "20blobs15K37S200"
+INDEX = 'gci2'
 
-index='gci2'
+# Load training and validation data
+TRAINING_FILES = [
+    f"{INDEX}_{SUFFIX}.npy",
+    f"{INDEX}_trd1_{SUFFIX}.npy",
+    f"{INDEX}_am1_{SUFFIX}.npy",
+    f"{INDEX}_am2_{SUFFIX}.npy",
+]
 
-ind=np.load(root_path+"/data/"+index+"_"+sufijo+".npy",allow_pickle=True)
-trd1= np.load(root_path+"/data/"+index+"_trd1_"+sufijo+".npy",allow_pickle=True)
-#trd2= np.load(root_path+"/data/"+index+"_trd2_"+sufijo+".npy",allow_pickle=True)
-am1= np.load(root_path+"/data/"+index+"_am1_"+sufijo+".npy",allow_pickle=True)
-am2= np.load(root_path+"/data/"+index+"_am2_"+sufijo+".npy",allow_pickle=True)
+data_train = [
+    np.load(os.path.join(ROOT_PATH, "train", file), allow_pickle=True)
+    for file in TRAINING_FILES
+]
 
-ind_val=np.load(root_path+"/data/"+index+"_"+sufijo+"_val.npy",allow_pickle=True)
-trd1_val= np.load(root_path+"/data/"+index+"_trd1_"+sufijo+"_val.npy",allow_pickle=True)
-#trd2_val= np.load(root_path+"/data/"+index+"_trd2_"+sufijo+"_val.npy",allow_pickle=True)
-am1_val= np.load(root_path+"/data/"+index+"_am1_"+sufijo+"_val.npy",allow_pickle=True)
-am2_val= np.load(root_path+"/data/"+index+"_am2_"+sufijo+"_val.npy",allow_pickle=True)
+VALIDATION_FILES = [
+    f"{INDEX}_{SUFFIX}_val.npy",
+    f"{INDEX}_trd1_{SUFFIX}_val.npy",
+    f"{INDEX}_am1_{SUFFIX}_val.npy",
+    f"{INDEX}_am2_{SUFFIX}_val.npy",
+]
 
+data_validation = [
+    np.load(os.path.join(ROOT_PATH, "val", file), allow_pickle=True)
+    for file in VALIDATION_FILES
+]
 
-def evalfit(individual,val_mode=False,den_err=np.inf):
-    global ind
-    global trd1
-    #global trd2
-    global am1
-    global am2
+# Set global variables for evalfit
+global ind, trd1, am1, am2, ind_val, trd1_val, am1_val, am2_val
 
-    global ind_val
-    global trd1_val
-    #global trd2_val
-    global am1_val
-    global am2_val
+ind, trd1, am1, am2 = data_train
+ind_val, trd1_val, am1_val, am2_val = data_validation
 
-    if val_mode:
-        ind_= ind_val.copy()
-        trd1_=trd1_val.copy()
-        #trd2_=trd2_val.copy()
-        am1_=am1_val.copy()
-        am2_=am2_val.copy()
-
-    else:
-        ind_= ind.copy()
-        trd1_=trd1.copy()
-        #trd2_=trd2.copy()
-        am1_=am1.copy()
-        am2_=am2.copy()
-
-    u=np.array(individual).copy()
-    y=ind_[:,-1]
-    #k=ind_.shape[1]-1 #38
-    n=ind_.shape[0]
-    acc=0
-    #err=0
-    #err2=0
-   
-    for j in range(0,n):
-        a=am1_[j]
-        if a==am2_[j] and trd1_[j,a] > u[0]:  
-            pred=a+2
-        elif (trd1_[j,:] > u[1]).any():
-            pred=np.amax((trd1_[j,:] > u[1]).nonzero())+2
-        else: pred=1
-        
-        acc+=(pred==y[j])
-        #err+=np.abs(pred-y[j])
-        #err2+=np.abs(pred-y[j])**2
-        
-        #if j > 14 and j < 25: print(u,pred,y[j],acc,err,acc-err/den_err)
+def evalfit(individual, val_mode=False, den_err=np.inf): 
+    ind_, trd1_, am1_, am2_ = (ind_val, trd1_val, am1_val, am2_val) if val_mode else (ind, trd1, am1, am2)
     
-    return (acc,)    
-    
-    #return (acc-err/den_err-err2/(den_err**2),)  
+    u = np.array(individual).copy()
+    y = ind_[:, -1]
+    n = ind_.shape[0]
+    acc = 0
 
+    for j in range(n):
+        a = am1_[j]
+        if a == am2_[j] and trd1_[j, a] > u[0]:
+            pred = a + 2
+        elif (trd1_[j, :] > u[1]).any():
+            pred = np.amax((trd1_[j, :] > u[1]).nonzero()) + 2
+        else:
+            pred = 1
+
+        acc += (pred == y[j])
+
+    return (acc,)
 
 def GeneticAlgorithm(weight,GEN,n_pop,tolerance,CXPB,MUTPB,WARMUP,
                      MAX_RESTART,seed=31416,initial_sol=None,
@@ -175,7 +163,6 @@ def GeneticAlgorithm(weight,GEN,n_pop,tolerance,CXPB,MUTPB,WARMUP,
         invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
         fitnesses = toolbox.map(toolbox.evaluate, invalid_ind)
         for ind, fit in zip(invalid_ind, fitnesses):
-            #print(ind[:],fit)
             ind.fitness.values = fit
         
         pop[:]=offspring
@@ -191,7 +178,6 @@ def GeneticAlgorithm(weight,GEN,n_pop,tolerance,CXPB,MUTPB,WARMUP,
         best_list.append(gbest_popact[:])
         best_list_fitness.append(gbest_popact.fitness.values[0])
         val_err.append(toolbox.evaluate(gbest_popact,val_mode=True)[0])
-        #print(val_err[-1])
         
         if not gbest_val or (val_err[-1],) > gbest_val.fitness.values:
             gbest_val = creator.Individual(gbest_popact)
@@ -200,7 +186,7 @@ def GeneticAlgorithm(weight,GEN,n_pop,tolerance,CXPB,MUTPB,WARMUP,
                 gbest = creator.Individual(gbest_popact)
                 gbest.fitness.values = gbest_popact.fitness.values
         
-        gbest_popact=None ####Para que en cada iteración evalúe en validación al mejor de la población actual
+        gbest_popact=None  
 
         logbook.record(gen=g, tam_pop = len(pop), evals=len(invalid_ind), val_error=val_err[g], restarts=n_restart, **stats.compile(pop))
                 
@@ -228,6 +214,88 @@ def GeneticAlgorithm(weight,GEN,n_pop,tolerance,CXPB,MUTPB,WARMUP,
         
     return pop, logbook, best_list,best_list_fitness, g,val_err
 
+if __name__ == "__main__":
+
+    # Initialize parameters
+    DEN_ERR = np.inf
+    TOLERANCE = 1
+    POPULATION_SIZE = 100
+    CROSSOVER_PROB = 0.9
+    MUTATION_PROB = 0.2
+    GENERATIONS = 250
+    WARMUP_STEPS = 10
+    MAX_RESTARTS = 30
+    SEED = 1481
+    INITIAL_SOLUTION = None  # Optionally provide an initial solution, e.g., [[4, 2.2]]
 
 
+    # Experiment details
+    PARAMS_DESC = (
+        f"_Acc_P{POPULATION_SIZE}G{GENERATIONS}W{WARMUP_STEPS}M{MUTATION_PROB}" \
+        f"T{TOLERANCE}R{MAX_RESTARTS}S{SEED}D{DEN_ERR}"
+    )
+    OBS_SUFFIX = f"_r100{SUFFIX}"
 
+    # Track solutions and performance
+    all_solutions = []
+    
+    # Clear terminal for a clean run
+    os.system('clear')
+     
+    
+    # Run genetic algorithm
+    population, logbook, best_solutions, best_fitness, n_generations, val_errors = GeneticAlgorithm(
+        weight=+1.0,
+        den_err=DEN_ERR,
+        GEN=GENERATIONS,
+        n_pop=POPULATION_SIZE,
+        tolerance=TOLERANCE,
+        CXPB=CROSSOVER_PROB,
+        MUTPB=MUTATION_PROB,
+        WARMUP=WARMUP_STEPS,
+        MAX_RESTART=MAX_RESTARTS,
+        seed=SEED,
+        initial_sol=INITIAL_SOLUTION,
+    )
+
+    # Save logbook to an Excel file
+    log_data = [[value for value in record.values()] for record in logbook]
+    log_df = pd.DataFrame(log_data, columns=logbook.header)
+    log_df.to_csv(f"./genetic/{INDEX}_logbook_{PARAMS_DESC}{OBS_SUFFIX}.csv", index=False)
+
+    # Extract the best solution from training data
+    train_max_indices = [
+        idx for idx, fitness in enumerate(best_fitness) if fitness == np.max(best_fitness)
+    ]
+    
+    train_max_errors = [val_errors[idx] for idx in train_max_indices]
+    best_train_idx = train_max_indices[np.argmax(train_max_errors)]
+    best_solution_train = best_solutions[best_train_idx]
+
+    # Extract the best solution from validation data
+    val_max_indices = [
+        idx for idx, error in enumerate(val_errors) if error == np.max(val_errors)
+    ]
+    val_max_fitness = [best_fitness[idx] for idx in val_max_indices]
+    best_val_idx = val_max_indices[np.argmax(val_max_fitness)]
+    best_solution = best_solutions[best_val_idx]
+
+    all_solutions.append(best_solution)
+
+    # Save the best solutions
+    np.save(f"./genetic/{INDEX}_best_solution_{PARAMS_DESC}{OBS_SUFFIX}.npy", best_solution)
+    np.savetxt(f"./genetic/{INDEX}_best_solution_{PARAMS_DESC}{OBS_SUFFIX}.txt", best_solution)
+
+    np.save(f"./genetic/{INDEX}_best_solution_train_{PARAMS_DESC}{OBS_SUFFIX}.npy", best_solution_train)
+    np.savetxt(f"./genetic/{INDEX}_best_solution_train_{PARAMS_DESC}{OBS_SUFFIX}.txt", best_solution_train)
+
+    # Plot and save the convergence graph
+    plt.figure(figsize=(10, 6))
+    plt.plot(range(len(best_fitness)), best_fitness, label="Training Fitness", color="green")
+    plt.plot(range(len(val_errors)), val_errors, label="Validation Error", color="red")
+    plt.xlabel("Number of Iterations")
+    plt.ylabel("Objective Function Value")
+    plt.title("Convergence Graph")
+    plt.legend()
+    plt.savefig(f"./genetic/{INDEX}_conv_{PARAMS_DESC}{OBS_SUFFIX}.png")
+    plt.close()

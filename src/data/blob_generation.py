@@ -256,7 +256,7 @@ def generate_scenario_datasets(path, n_blobs, initial_seed, scenarios_file):
             
     
 def generate_train_data(path, dim=2, k_low=1, k_high=10, n_samples=500, n_blobs=10,
-                        max_K=30, initial_seed=1, val=False, suffix=None, max_pred=28):
+                        k_max=30, initial_seed=1, val=False, suffix=None, max_pred=28):
     """
     Generates training data and computes clustering metrics such as SSE, GCI, and inertia.
 
@@ -266,7 +266,7 @@ def generate_train_data(path, dim=2, k_low=1, k_high=10, n_samples=500, n_blobs=
     k_high (int): Maximum number of clusters.
     n_samples (int): Number of samples per blob.
     n_blobs (int): Number of data blobs.
-    max_K (int): Maximum number of clusters to evaluate.
+    k_max (int): Maximum number of clusters to evaluate.
     initial_seed (int): Random seed for reproducibility.
     val (bool): If True, saves validation datasets.
     suffix (str): Suffix for saved file names.
@@ -281,7 +281,7 @@ def generate_train_data(path, dim=2, k_low=1, k_high=10, n_samples=500, n_blobs=
     classifiers = [KMeans]
 
     N = len(data)
-    K = range(1, max_K + 1)
+    K = range(1, k_max + 1)
 
     # Initialize metrics arrays
     sse = np.zeros((N, len(K) + 1))
@@ -378,7 +378,12 @@ if __name__ == "__main__":
     rng = np.random.default_rng(1)
     initial_seed=200
     n_blobs=20
+    k_max=37
+    max_pred=35
+    kh=15
+    suffix=str(n_blobs)+"blobs"+str(kh)+"K"+str(k_max)+"S"+str(initial_seed)
     
     generate_test_data(path="./datasets/")
-    generate_train_data(path = "./datasets/train", initial_seed=initial_seed)
-    generate_train_data(path = "./datasets/val", val=True, initial_seed=initial_seed + n_blobs) 
+    
+    generate_train_data(path = "./datasets/train", initial_seed=initial_seed + n_blobs, n_blobs=n_blobs, k_max=k_max, max_pred=max_pred, suffix=suffix)
+    generate_train_data(path = "./datasets/val", val=True, initial_seed=initial_seed + n_blobs, n_blobs=n_blobs, k_max=k_max, max_pred=max_pred, suffix=suffix) 

@@ -163,10 +163,8 @@ cython_debug/
 #Ignore vscode env
 .vscode/
 
-# Ignore datasets folder content
 datasets/
-
-# Ignore results folder content
+genetic/
 results/
 
 # Specific files to ignore
