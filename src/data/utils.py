@@ -1,5 +1,5 @@
 import warnings
-
+import os
 import numpy as np
 
 from typing import Generator, List, Tuple, Union
@@ -22,7 +22,11 @@ from sklearn.exceptions import ConvergenceWarning
 
 from scipy.optimize import linear_sum_assignment as linear_assignment
 
-
+def ensure_dirs_exist(paths):
+    for path in paths:
+        if not os.path.exists(path):
+            os.makedirs(path)
+            
 def get_dataframe_from_dat(file_path: str) -> Generator[List[Union[float, str]], None, None]:
     """
     Reads a .dat file and yields rows as lists of features with the target.

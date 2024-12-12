@@ -77,11 +77,11 @@ def GeneticAlgorithm(weight,GEN,n_pop,tolerance,CXPB,MUTPB,WARMUP,
     creator.create("Individual", list, fitness=creator.FitnessMin)
 
     toolbox = base.Toolbox()
-    toolbox.register("delta1", random.uniform, 1., 100.)
+    toolbox.register("delta1", random.uniform, 1., 10.)
     toolbox.register("delta2", random.uniform, 1., 10.)
     
     pmin=[1.,  1.]
-    pmax=[100., 10.]
+    pmax=[1., 10.]
     
     toolbox.register("individual",
                      tools.initCycle, 
@@ -226,7 +226,7 @@ if __name__ == "__main__":
     WARMUP_STEPS = 10
     MAX_RESTARTS = 30
     SEED = 1481
-    INITIAL_SOLUTION = None  # Optionally provide an initial solution, e.g., [[4, 2.2]]
+    INITIAL_SOLUTION = [4, 2.2]  # Optionally provide an initial solution, e.g., [[4, 2.2]]
 
 
     # Experiment details
@@ -281,7 +281,7 @@ if __name__ == "__main__":
     best_solution = best_solutions[best_val_idx]
 
     all_solutions.append(best_solution)
-
+    
     # Save the best solutions
     np.save(f"./genetic/{INDEX}_best_solution_{PARAMS_DESC}{OBS_SUFFIX}.npy", best_solution)
     np.savetxt(f"./genetic/{INDEX}_best_solution_{PARAMS_DESC}{OBS_SUFFIX}.txt", best_solution)

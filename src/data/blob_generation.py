@@ -9,7 +9,7 @@ from scipy.spatial import distance
 from sklearn import datasets
 
 from utils import (
-    global_covering_index, coverings_vect, coverings_vect_square, SSE
+    global_covering_index, coverings_vect, coverings_vect_square, SSE, ensure_dirs_exist
 )
 
 from sklearn.preprocessing import StandardScaler
@@ -351,7 +351,7 @@ def generate_train_data(path, dim=2, k_low=1, k_high=10, n_samples=500, n_blobs=
 
 
 def generate_test_data(
-    path, n_samples=500, n_blobs=10, initial_seed=500, random_state=131416, scenarios_file="scenarios.csv"
+    path, n_samples=500, n_blobs=10, initial_seed=500, random_state=131416, scenarios_file="../scenarios.csv"
 ):
     """
     Generate and save synthetic, real-world, and scenario-based test datasets.
@@ -372,7 +372,9 @@ def generate_test_data(
     
     # Generate scenario-based datasets
     generate_scenario_datasets(path + "blobs/", n_blobs, initial_seed, scenarios_file)
-     
+    
+ 
+        
     
 if __name__ == "__main__":
     rng = np.random.default_rng(1)
@@ -382,6 +384,16 @@ if __name__ == "__main__":
     max_pred=35
     kh=15
     suffix=str(n_blobs)+"blobs"+str(kh)+"K"+str(k_max)+"S"+str(initial_seed)
+    
+    # Ensure directories exist
+    ensure_dirs_exist([
+        "./datasets",
+        "./datasets/train",
+        "./datasets/val",
+        "./results",
+        "./out_files",
+        "./genetic"
+    ])
     
     generate_test_data(path="./datasets/")
     
