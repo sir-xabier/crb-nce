@@ -226,7 +226,7 @@ if __name__ == "__main__":
     WARMUP_STEPS = 10
     MAX_RESTARTS = 30
     SEED = 1481
-    INITIAL_SOLUTION = [4, 2.2]  # Optionally provide an initial solution, e.g., [[4, 2.2]]
+    INITIAL_SOLUTION = [[4,2.2]]  # Optionally provide an initial solution, e.g., [[4, 2.2]]
 
 
     # Experiment details
