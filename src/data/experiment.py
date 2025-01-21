@@ -3,6 +3,8 @@ import os
 import sys
 import argparse
 import warnings
+import time
+import logging
 
 # Suppress warnings
 warnings.filterwarnings("ignore")
@@ -22,12 +24,21 @@ from sklearn.cluster import kmeans_plusplus
 from sklearn.metrics import rand_score, adjusted_rand_score
 from sklearn.metrics.pairwise import pairwise_distances
 
+from sklearn.model_selection import train_test_split
+from reval.best_nclust_cv import FindBestClustCV
+from sklearn.neighbors import KNeighborsClassifier
+
+
 # Cluster evaluation modules
 from data.utils import (
-    global_covering_index, coverings, coverings_square, coverings_vect, coverings_vect_square, clust_acc, silhouette_score,
+    global_covering_index, coverings_vect, coverings_vect_square, clust_acc, silhouette_score,
     calinski_harabasz_score, davies_bouldin_score, bic_fixed,
     curvature_method, variance_last_reduction, xie_beni_ts, SSE
 )
+
+# Setup logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 
 def argmax_(row, m, tolerance=1e-4):
@@ -59,6 +70,7 @@ def run_clustering(args):
     df = args.df.copy()
 
     # Load dataset
+    logger.info(f"Loading dataset: {args.dataset}")
     data = np.load(args.ROOT + args.dataset, allow_pickle=True)
     X = data[:, :-1]
     y = pd.factorize(data[:, -1])[0] + 1
@@ -73,7 +85,11 @@ def run_clustering(args):
 
     X = StandardScaler().fit_transform(X)
     distance_normalizer = 1 / np.sqrt(25 * d)
-
+    X_train, _, y_train, _ = train_test_split(X.copy(), y,
+                                          test_size=0.30,
+                                          random_state=args.seed,
+                                          stratify=y)
+    
     initial_centers = []
     clf = args.key
     config = args.value
@@ -84,10 +100,24 @@ def run_clustering(args):
         columns=np.arange(1, args.kmax + 1)
     )
 
-    distance_matrix = None
-    if clf.__name__ == "KMedoids":
-        distance_matrix = pairwise_distances(X)
-
+    
+    distance_matrix = pairwise_distances(X)
+    if not clf.__name__ == "KMedoids":
+        
+        start_time = time.time()
+        
+        findbestclust = FindBestClustCV(nfold=2,
+                                        nclust_range=list(range(1, args.kmax + 1)),
+                                        s=KNeighborsClassifier(),
+                                        c=clf(**config),
+                                        nrand=100)
+        
+        _, nbest = findbestclust.best_nclust(X_train, iter_cv=10, strat_vect=y_train)
+        
+        end_time = time.time()
+        logger.info(f"Execution time of Reval: {end_time - start_time:.2f} seconds")
+     
+    start_time = time.time()   
     for k in range(1, args.kmax + 1):
         y_best_solution = None
         centroids = None
@@ -122,9 +152,11 @@ def run_clustering(args):
                     centroids = model.cluster_centers_
 
         if y_best_solution is not None and len(np.unique(y_best_solution)) == k:
+            logger.info(f"Storing clustering results for {k} clusters")
+
             df_predictions[k] = y_best_solution
             
-            Dmat=distance_matrix(X, centroids)
+            Dmat=distance_matrix
         
             u=coverings_vect(X,centroids,y_best_solution,distance_normalizer=distance_normalizer,Dmat=Dmat)
             u2=coverings_vect_square(X,centroids,y_best_solution,distance_normalizer=distance_normalizer,Dmat=Dmat)
@@ -145,25 +177,32 @@ def run_clustering(args):
             df['gci2'][k] = global_covering_index(u2,function='mean', mode=0)
              
             if k == true_k:
+                logger.info(f"True number of clusters detected: {true_k}")
+
                 df.loc[k, 'acc'] = clust_acc(y, y_best_solution)
                 df.loc[k, 'rscore'] = rand_score(y, y_best_solution)
                 df.loc[k, 'adjrscore'] = adjusted_rand_score(y, y_best_solution)
-
+                if not clf.__name__ == "KMedoids":
+                    df.loc[k, 'reval'] = nbest
     df['cv'][1:] = curvature_method(df['sse'][1:].values)
+    end_time = time.time()
+    logger.info(f"Execution time of metrics: {end_time - start_time:.2f} seconds")
+
      
     df = pd.concat([df, df_predictions.T], axis=1)
-    
+     
     return df 
 
 def run_experiment(args):
-    dataset_name=args.dataset.split("/")[-1][:-4]
+    dataset_name = args.dataset.split("/")[-1][:-4]
     exp_name = f"./results/{dataset_name}-{args.key.__name__}_{args.n_init}_{args.kmax}_{args.seed}.npy"
     if os.path.exists(exp_name):
-        pass
+        logger.info(f"Experiment {exp_name} already exists. Skipping.")
     else:
-        print(f"EXPERIMENT {exp_name[10:-4]} | PROCESS:{os.getpid()} running...\n")
+        logger.info(f"Starting experiment {exp_name} | Process ID: {os.getpid()}")
         results = run_clustering(args)
-        np.save(exp_name , results.iloc[1:].values, allow_pickle=True, fix_imports=True)
+        np.save(exp_name, results.iloc[1:].values, allow_pickle=True, fix_imports=True)
+        logger.info(f"Experiment {exp_name} completed and results saved.")
 
 
 def main():
@@ -191,7 +230,7 @@ def main():
     # Initialize result DataFrame
     df_columns = {
         's': 0, 'ch': 0, 'db': 0, 'sse': None, 'bic': 0, 'xb': 0, 'cv': 0,
-        'vlr': 0,'gci': 0, 'gci2': 0, 'gcim': 0, 'gci2m': 0, 'acc': np.nan, 'rscore': np.nan, 'adjrscore': np.nan
+        'vlr': 0,'gci': 0, 'gci2': 0, 'gcim': 0, 'gci2m': 0, 'acc': np.nan, 'rscore': np.nan, 'adjrscore': np.nan, 'reval': -1
     }
     
     args.df = pd.DataFrame({col: np.zeros(args.kmax + 1) if val == 0 else np.full(args.kmax + 1, val) for col, val in df_columns.items()})
