@@ -54,7 +54,7 @@ def main():
     output_solutions_file = os.path.join("./out_files/best_solutions.csv")
 
     # Load metrics
-    metrics = load_header_as_str_array(header_file="./datasets/header.txt")
+    metrics = load_header_as_str_array(header_file="./out_files/header.txt")
     if not metrics:
         print("Cannot proceed without header metrics.")
         return None

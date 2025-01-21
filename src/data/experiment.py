@@ -187,7 +187,10 @@ def run_clustering(args):
     df['cv'][1:] = curvature_method(df['sse'][1:].values)
     end_time = time.time()
     logger.info(f"Execution time of metrics: {end_time - start_time:.2f} seconds")
-
+    headers = df.columns.tolist()
+    with open("out_files/header.txt", 'w') as f:
+        for header in headers:
+            f.write(header + '\n')
      
     df = pd.concat([df, df_predictions.T], axis=1)
      
@@ -203,7 +206,6 @@ def run_experiment(args):
         results = run_clustering(args)
         np.save(exp_name, results.iloc[1:].values, allow_pickle=True, fix_imports=True)
         logger.info(f"Experiment {exp_name} completed and results saved.")
-
 
 def main():
     """
@@ -232,7 +234,7 @@ def main():
         's': 0, 'ch': 0, 'db': 0, 'sse': None, 'bic': 0, 'xb': 0, 'cv': 0,
         'vlr': 0,'gci': 0, 'gci2': 0, 'gcim': 0, 'gci2m': 0, 'acc': np.nan, 'rscore': np.nan, 'adjrscore': np.nan, 'reval': -1
     }
-    
+
     args.df = pd.DataFrame({col: np.zeros(args.kmax + 1) if val == 0 else np.full(args.kmax + 1, val) for col, val in df_columns.items()})
 
     for clf, config in classifiers.items():
