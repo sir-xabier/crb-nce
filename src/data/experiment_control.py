@@ -33,7 +33,7 @@ from sklearn.neighbors import KNeighborsClassifier
 from data.utils import (
     global_covering_index, coverings_vect, coverings_vect_square, clust_acc, silhouette_score,
     calinski_harabasz_score, davies_bouldin_score, bic_fixed,
-    curvature_method, variance_last_reduction, xie_beni_ts, SSE
+    curvature_method, variance_last_reduction, xie_beni_ts, SSE, alg1
 )
 
 # Setup logging
@@ -41,26 +41,21 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 
-def argmax_(row, m, tolerance=1e-4):
-    """Finds the index of the maximum value in the row considering tolerances."""
-    if m == 1:
-        return 0
+# Define prediction methods for different criteria
+select_k_max = lambda x: np.nanargmax(x) + 1
+select_k_min = lambda x: np.nanargmin(x) + 1
+select_k_vlr = lambda x: np.amax(np.array(x <= 0.99).nonzero()) + 1
 
-    indices = np.argpartition(row, -m)[-m:]
-    indices = indices[np.argsort(row[indices])]
-    count = 0
-
-    for i in range(1, m):
-        if abs(row[indices[0]] - row[indices[i]]) < tolerance:
-            count += 1
-        else:
-            if count > 0:
-                return indices[np.random.randint(count)]
-            break
-
-    return indices[0]
+# Define metrics for accuracy and mean squared error
+acc = lambda x: len(np.where(x == 0)[0]) / len(x)
 
 
+# Thresholds for alg1 for different modes
+thresholds = {
+    'sse': [18.3, 2.5],
+    'gci': [4, 2.2],
+    'gci2': [14.6, 2.4]
+}
 
 def run_clustering(args):
     """
@@ -86,25 +81,19 @@ def run_clustering(args):
 
     X = StandardScaler().fit_transform(X)
     distance_normalizer = 1 / np.sqrt(25 * d)
-    X_train, _, y_train, _ = train_test_split(X.copy(), y,
-                                          test_size=0.30,
-                                          random_state=args.seed,
-                                          stratify=y)
+
     
     initial_centers = []
     clf = args.key
     config = args.value
-
-    # DataFrame to store clustering results
-    df_predictions = pd.DataFrame(
-        index=['y_' + str(i + 1) for i in range(len(y))],
-        columns=np.arange(1, args.kmax + 1)
-    )
-
     
     distance_matrix = pairwise_distances(X)
 
     if args.icvi == "reval":
+	    X_train, _, y_train, _ = train_test_split(X.copy(), y,
+                                      test_size=0.30,
+                                      random_state=args.seed,
+                                      stratify=y)
 	    start_time = time.time()
 	    
 	    findbestclust = FindBestClustCV(nfold=2,
@@ -117,15 +106,18 @@ def run_clustering(args):
 	    
 	    reval_time = time.time() - start_time
 	    
+        args.pred = nbest
+		args.time = reval_time
+
 	 
 	 else:
 
-	    start_time = time.time()   
+	      
 	    for k in range(1, args.kmax + 1):
 	        y_best_solution = None
 	        centroids = None
 	        best_solution_error = np.inf
-	        
+	        start_time = time.time()  
            	for i in range(args.n_init):
 	            initial_centers.append(args.kmeans_pp(X, k, args.seed + i))
 	            initial_center = initial_centers[-1]
@@ -140,81 +132,116 @@ def run_clustering(args):
 	                best_solution_error = error
 	                y_best_solution = y_pred
 	                centroids = model.cluster_centers_
-	         end_time + = time.time() - start_time 
+	         args.time + = time.time() - start_time 
 
 	        if y_best_solution is not None and len(np.unique(y_best_solution)) == k:
 	            logger.info(f"Storing clustering results for {k} clusters")
 
-	            df_predictions[k] = y_best_solution
 	            
 	            Dmat=distance_matrix
 	        	sse_time_start = time.time()
 	            sse_=SSE(X,y_best_solution, centroids)
 	            sse_time_end =  time.time()- sse_time_start
+				
 				if args.icvi == "s":
 				    start_time = time.time()
 				    df['s'][k] = silhouette_score(X, y_best_solution)
-				    df['s_time'][k] += time.time() - start_time + end_time
+				    args.time += time.time() - start_time 
 
 				elif args.icvi == "ch":
 				    start_time = time.time()
 				    df['ch'][k] = calinski_harabasz_score(X, y_best_solution)
-				    df['ch_time'][k] += time.time() - start_time + end_time
+				    args.time += time.time() - start_time 
 
 				elif args.icvi == "db":
 				    start_time = time.time()
 				    df['db'][k] = davies_bouldin_score(X, y_best_solution)
-				    df['db_time'][k] += time.time() - start_time + end_time
+				    args.time += time.time() - start_time 
 
 				elif args.icvi == "sse":
 				    df['sse'][k] = sse_ 
-				    df['sse'][k] = end_time + sse_time_end
+				    args.time += sse_time_end
 
 				elif args.icvi == "vlr":
 				    start_time = time.time()
 				    df['vlr'][k] = variance_last_reduction(y_best_solution, df['sse'][1:k].values, sse_, d=d)
-				    df['vlr_time'][k] += time.time() - start_time + end_time + sse_time_end
+				    args.time += time.time() - start_time + sse_time_end
 
 				elif args.icvi == "bic":
 				    start_time = time.time()
 				    df['bic'][k] = bic_fixed(X, y_best_solution, sse_)
-				    df['bic_time'][k] = time.time() - start_time  + end_time + sse_time_end
+				    args.time += time.time() - start_time + sse_time_end
 
 				elif args.icvi == "xb":
 				    start_time = time.time()
 				    df['xb'][k] = xie_beni_ts(y_best_solution, y_best_solution, sse_)
-				    df['xb_time'][k] += time.time() - start_time  + end_time + sse_time_end
+				    args.time += time.time() - start_time + sse_time_end
 
 				elif args.icvi == "gci":
 				    start_time = time.time()
 				    u=coverings_vect(X,centroids,y_best_solution,distance_normalizer=distance_normalizer,Dmat=Dmat)
 				    df['gci'][k] = global_covering_index(u, function='mean', mode=0)
-				    df['gci_time'][k] += time.time() - start_time  + end_time 
+				    args.time += time.time() - start_time  
 
 				elif args.icvi == "gci2":
 				    start_time = time.time()
 				    u2=coverings_vect_square(X,centroids,y_best_solution,distance_normalizer=distance_normalizer,Dmat=Dmat)
 				    df['gci2'][k] = global_covering_index(u2, function='mean', mode=0)
-				    df['gci2_time'][k] += time.time() - start_time + end_time 
-					             
-	            if k == true_k:
-	                logger.info(f"True number of clusters detected: {true_k}")
-
-	                df.loc[k, 'acc'] = clust_acc(y, y_best_solution)
-	                df.loc[k, 'rscore'] = rand_score(y, y_best_solution)
-	                df.loc[k, 'adjrscore'] = adjusted_rand_score(y, y_best_solution)
+				    args.time += time.time() - start_time  
 	                
-	                if args.icvi == "reval":
-	                    df.loc[k, 'reval'] = nbest
-	    				df.loc[k, 'reval_time'] = reval_time
+				elif args.icvi == "cv":
+					args.time += sse_time_end
 
-	    if args.icvi == "cv":
-	    	start_time = time.time()
-	    	df['cv'][1:] = curvature_method(df['sse'][1:].values)
-	    	df['cv_time'] += (time.time() - start_time)/args.kmax  + end_time df['sse_time']
+        if args.icvi == "cv":
+            start_time = time.time()
+            df['cv'][1:] = curvature_method(df['sse'][1:].values)
+            args.pred = df[args.icvi].apply(select_k_max, axis=0).values[0]
+            args.time += time.time() - start_time
+        elif args.icvi == "s":
+            start_time = time.time()
+            args.pred = df[args.icvi].apply(select_k_max, axis=0).values[0]
+            args.time += time.time() - start_time
+        elif args.icvi == "ch":
+            start_time = time.time()
+            args.pred = df[args.icvi].apply(select_k_max, axis=0).values[0]
+            args.time += time.time() - start_time
+        elif args.icvi == "db":
+            start_time = time.time()
+            args.pred = df[args.icvi].apply(select_k_min, axis=0).values[0]
+            args.time += time.time() - start_time
+        elif args.icvi == "sse":
+            start_time = time.time()
+            args.pred = df[args.icvi].apply(
+                lambda x: alg1(ind=x, id_value=x.name, thresholds=thresholds['sse'], mode='sse'), axis=0
+            ).values[0]
+            args.time += time.time() - start_time
+        elif args.icvi == "vlr":
+            start_time = time.time()
+            args.pred = df[args.icvi].apply(select_k_vlr, axis=0).values[0]
+            args.time += time.time() - start_time
+        elif args.icvi == "bic":
+            start_time = time.time()
+            args.pred = df[args.icvi].apply(select_k_max, axis=0).values[0]
+            args.time += time.time() - start_time
+        elif args.icvi == "xb":
+            start_time = time.time()
+            args.pred = df[args.icvi].apply(select_k_min, axis=0).values[0]
+            args.time += time.time() - start_time
+        elif args.icvi == "gci":
+            start_time = time.time()
+            args.pred = df[args.icvi].apply(
+                lambda x: alg1(ind=x, id_value=x.name, thresholds=thresholds['gci'], mode='gci'), axis=0
+            ).values[0]
+            args.time += time.time() - start_time
+        elif args.icvi == "gci2":
+            start_time = time.time()
+            args.pred = df[args.icvi].apply(
+                lambda x: alg1(ind=x, id_value=x.name, thresholds=thresholds['gci2'], mode='gci2'), axis=0
+            ).values[0]
+            args.time += time.time() - start_time
 
-     
-    return df 
+    # Return time, prediction, and correctness
+    return (args.time, args.pred, true_k)
 
 def run_experiment(args):
     dataset_name = args.dataset.split("/")[-1][:-4]
@@ -223,9 +250,15 @@ def run_experiment(args):
         logger.info(f"Experiment {exp_name} already exists. Skipping.")
     else:
         logger.info(f"Starting experiment {exp_name} | Process ID: {os.getpid()}")
-        results = run_clustering(args)
-        np.save(exp_name, results.iloc[1:].values, allow_pickle=True, fix_imports=True)
+        time_taken, pred_k, true_k = run_clustering(args)
+        results = {
+            'time': time_taken,
+            'predicted_k': pred_k,
+            'true_k': is_correct
+        }
+        np.save(exp_name, results, allow_pickle=True)
         logger.info(f"Experiment {exp_name} completed and results saved.")
+
 
 def main():
     """
@@ -250,9 +283,11 @@ def main():
 
     # Initialize result DataFrame
     df_columns = {
-        args.icvi: 0 if args.icvi != "reval" else -1, args.icvi + "_time": 0 if args.icvi != "reval" else -1, 'acc': np.nan, 'rscore': np.nan, 'adjrscore': np.nan, 'k_pred': -1
+        args.icvi: 0 
     }
 
+    args.time = 0  
+    args.pred = -1
     args.df = pd.DataFrame({col: np.zeros(args.kmax + 1) if val == 0 else np.full(args.kmax + 1, val) for col, val in df_columns.items()})
 
     for clf, config in classifiers.items():
