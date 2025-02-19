@@ -25,7 +25,6 @@ from sklearn.metrics import rand_score, adjusted_rand_score
 from sklearn.metrics.pairwise import pairwise_distances
 
 from sklearn.model_selection import train_test_split
-from reval.best_nclust_cv import FindBestClustCV
 from sklearn.neighbors import KNeighborsClassifier
 
 
@@ -77,7 +76,7 @@ def run_clustering(args):
     
     n = X.shape[0]
     d = X.shape[1]
-    
+
     true_k = len(np.unique(y))
     if 'no_structure' in args.dataset:
         true_k = 1
@@ -85,10 +84,6 @@ def run_clustering(args):
 
     X = StandardScaler().fit_transform(X)
     distance_normalizer = 1 / np.sqrt(25 * d)
-    X_train, _, y_train, _ = train_test_split(X.copy(), y,
-                                          test_size=0.30,
-                                          random_state=args.seed,
-                                          stratify=y)
     
     initial_centers = []
     clf = args.key
@@ -102,22 +97,7 @@ def run_clustering(args):
 
     
     distance_matrix = pairwise_distances(X)
-    if not clf.__name__ == "KMedoids":
-        
-        start_time = time.time()
-        
-        findbestclust = FindBestClustCV(nfold=2,
-                                        nclust_range=list(range(1, args.kmax + 1)),
-                                        s=KNeighborsClassifier(),
-                                        c=clf(**config),
-                                        nrand=100)
-        
-        _, nbest = findbestclust.best_nclust(X_train, iter_cv=10, strat_vect=y_train)
-        
-        end_time = time.time()
-        logger.info(f"Execution time of Reval: {end_time - start_time:.2f} seconds")
-     
-    start_time = time.time()   
+      
     for k in range(1, args.kmax + 1):
         y_best_solution = None
         centroids = None
@@ -151,7 +131,7 @@ def run_clustering(args):
                     y_best_solution = y_pred
                     centroids = model.cluster_centers_
 
-        if y_best_solution is not None and len(np.unique(y_best_solution)) == k:
+        if y_best_solution is not None: #and len(np.unique(y_best_solution)) == k
             logger.info(f"Storing clustering results for {k} clusters")
 
             df_predictions[k] = y_best_solution
@@ -162,7 +142,7 @@ def run_clustering(args):
             u2=coverings_vect_square(X,centroids,y_best_solution,distance_normalizer=distance_normalizer,Dmat=Dmat)
           
             sse_=SSE(X,y_best_solution, centroids)
-            
+            print(df['sse'][1:].values)
             df['s'][k]=silhouette_score(X,y_best_solution)
             df['ch'][k]=calinski_harabasz_score(X,y_best_solution)
             df['db'][k]=davies_bouldin_score(X,y_best_solution)
@@ -182,11 +162,8 @@ def run_clustering(args):
                 df.loc[k, 'acc'] = clust_acc(y, y_best_solution)
                 df.loc[k, 'rscore'] = rand_score(y, y_best_solution)
                 df.loc[k, 'adjrscore'] = adjusted_rand_score(y, y_best_solution)
-                if not clf.__name__ == "KMedoids":
-                    df.loc[k, 'reval'] = nbest
     df['cv'][1:] = curvature_method(df['sse'][1:].values)
-    end_time = time.time()
-    logger.info(f"Execution time of metrics: {end_time - start_time:.2f} seconds")
+
     headers = df.columns.tolist()
     with open("out_files/header.txt", 'w') as f:
         for header in headers:
@@ -232,7 +209,7 @@ def main():
     # Initialize result DataFrame
     df_columns = {
         's': 0, 'ch': 0, 'db': 0, 'sse': None, 'bic': 0, 'xb': 0, 'cv': 0,
-        'vlr': 0,'gci': 0, 'gci2': 0, 'gcim': 0, 'gci2m': 0, 'acc': np.nan, 'rscore': np.nan, 'adjrscore': np.nan, 'reval': -1
+        'vlr': 0,'gci': 0, 'gci2': 0, 'gcim': 0, 'gci2m': 0, 'acc': np.nan, 'rscore': np.nan, 'adjrscore': np.nan
     }
 
     args.df = pd.DataFrame({col: np.zeros(args.kmax + 1) if val == 0 else np.full(args.kmax + 1, val) for col, val in df_columns.items()})
