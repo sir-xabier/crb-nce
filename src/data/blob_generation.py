@@ -197,6 +197,50 @@ def generate_synthetic_datasets(path, n_samples, random_state):
     )
     save_dataset(path, "varied", X, y.reshape(-1, 1))
 
+def read_keel_dat(file_path):
+    """
+    Reads a KEEL .dat file and returns a Pandas DataFrame.
+
+    Args:
+        file_path (str): Path to the .dat file.
+
+    Returns:
+        pd.DataFrame: DataFrame containing the dataset.
+    """
+    try:
+        with open(file_path, 'r') as file:
+            lines = file.readlines()
+        
+        # Extract metadata lines (those starting with '@')
+        metadata_lines = [line.strip() for line in lines if line.startswith('@')]
+
+        # Extract attribute names from metadata
+        columns = []
+        for line in metadata_lines:
+            if line.startswith('@attribute'):
+                # The attribute name is the second element in the split string
+                columns.append(line.split()[1])
+
+        # Extract data lines (those not starting with '@')
+        data_lines = [line.strip() for line in lines if not line.startswith('@') and line.strip()]
+
+        # Split the data lines by commas
+        rows = [line.split(',') for line in data_lines]
+
+        # Ensure the number of columns matches the data
+        if len(columns) == 0 or len(rows[0]) != len(columns):
+            columns = [f'feature_{i}' for i in range(len(rows[0]))]
+
+        # Create DataFrame
+        df = pd.DataFrame(rows, columns=columns)
+        X, y = df.iloc[:, :-1].values, df.iloc[:, -1].values
+
+        return X, y
+
+    except Exception as e:
+        print(f"Error reading {file_path}: {e}")
+        return pd.DataFrame()  # Return an empty DataFrame on error
+
 def generate_real_datasets(path):
     """
     Load and save real-world datasets.
@@ -204,30 +248,27 @@ def generate_real_datasets(path):
     :param path: Directory path to save the datasets.
     """ 
     
-    datasets_to_load = {
+    sklearn_datasets_to_load = {
         "iris": datasets.load_iris,
         "digits": datasets.load_digits,
         "wine": datasets.load_wine,
         "breast_cancer": datasets.load_breast_cancer
     }
-    
-    for name, loader in datasets_to_load.items():
+    keel_dir = "./keel_raw"
+    print(os.listdir(keel_dir))
+    # Automatically load KEEL datasets from the directory
+    keel_datasets_to_load = {
+        os.path.splitext(f)[0]: os.path.join(keel_dir, f)
+        for f in os.listdir(keel_dir)
+    }
+
+    for name, loader in sklearn_datasets_to_load.items():
         X, y = loader(return_X_y=True)
         save_dataset(path, name, X, y.reshape(-1, 1))
-        
-    """ I comment this because I no longer have the files in .dat format and I have them all in .npy format.
-    real_path = "./datasets/real/"
-    for file in os.listdir(real_path):
-        generator = get_dataframe_from_dat(real_path  + file)
-        data = list(generator)
-        data = np.array(data)
-        X = data[:, :-1]
-        y = data[:, -1]
-        unique_labels, y = np.unique(y, return_inverse=True)
-        y += 1
-        y = y.reshape(-1, 1)z
-        np.save(path + file.split(".")[0] + ".npy", np.concatenate((X, y), axis=1))
-    """
+    
+    for name, file_path in keel_datasets_to_load.items():
+        X, y = read_keel_dat(file_path)
+        save_dataset(path, name, X, y.reshape(-1, 1))
     
 def generate_scenario_datasets(path, n_blobs, initial_seed, scenarios_file):
     """
