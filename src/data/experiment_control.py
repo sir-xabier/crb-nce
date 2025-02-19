@@ -259,7 +259,6 @@ def run_experiment(args):
         np.save(exp_name, results, allow_pickle=True)
         logger.info(f"Experiment {exp_name} completed and results saved.")
 
-
 def main():
     """
     Main function to parse arguments and execute clustering experiments in parallel.

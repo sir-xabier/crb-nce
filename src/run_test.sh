@@ -1,10 +1,16 @@
 #!/bin/bash
 
-# Define the parameter ranges
+# Define parameter ranges
+ICVIS=("reval" "s" "ch" "db" "sse" "vlr" "bic" "xb" "gci" "gci2" "cv")
 
-# Iterate over the parameter combinations
+# Iterate over datasets and ICVIs
 for folder in "datasets/control"; do
     for dataset in "./$folder"/*; do
-        tsp python src/data/experiment.py -dataset "${dataset#.}"
+        for icvi in "${ICVIS[@]}"; do
+            # Submit task to tsp queue
+            tsp python src/data/experiment.py \
+                -dataset "${dataset#.}" \
+                -icvi "$icvi" 
+        done
     done
 done
