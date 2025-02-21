@@ -396,6 +396,67 @@ def conds_score(gci_,id,u,p=None,c=None,b=None):
     return pred,flag
 
 
+def alg1(ind: np.ndarray, id_value: Union[str, float], thresholds: np.ndarray, mode: str) -> Union[int, float]:
+    """
+    Compute a prediction index based on differences in the input array `ind`.
+
+    Parameters:
+    ind (np.ndarray): Input array of indices.
+    id_value (Union[str, float]): Identifier value; if 'nan', the function returns np.NAN.
+    thresholds (np.ndarray): Thresholds for decision-making, array of length 2.
+    mode (str): Mode for computation; either 'sse' or 'gci'.
+
+    Returns:
+    Union[int, float]: Prediction index or np.NAN if `id_value` is 'nan'.
+    """
+    if str(id_value).lower() == "nan":
+        return np.NAN
+
+    n = ind.shape[0]
+
+    # Compute first and second differences based on the mode
+    if mode == 'sse':
+        first_diff = -1 * np.diff(ind)
+    elif mode == 'gci':
+        first_diff = np.diff(ind)
+    else:
+        raise ValueError("Invalid mode. Supported modes are 'sse' and 'gci'.")
+
+    second_diff = np.diff(first_diff)
+
+    # Initialize trend ratios and parameters
+    trend_ratio1 = np.zeros(n - 3)
+    trend_ratio2 = np.zeros(n - 3)
+
+    prediction = 1
+    max_ratio1 = -np.inf
+    max_ratio2 = -np.inf
+    argmax_ratio1 = None
+    argmax_ratio2 = None
+
+    # Compute trend ratios and update predictions
+    for i in range(1, n - 3):
+        trend_ratio1[i - 1] = first_diff[i - 1] / max(first_diff[i:])
+        trend_ratio2[i - 1] = second_diff[i - 1] / min(second_diff[i:])
+
+        # Update prediction based on thresholds
+        if trend_ratio1[i - 1] > thresholds[1]:
+            prediction = i + 1
+
+        if trend_ratio1[i - 1] > max_ratio1:
+            max_ratio1 = trend_ratio1[i - 1]
+            argmax_ratio1 = i - 1
+
+        if trend_ratio2[i - 1] > max_ratio2:
+            max_ratio2 = trend_ratio2[i - 1]
+            argmax_ratio2 = i - 1
+
+    # Final adjustment to prediction based on conditions
+    if argmax_ratio1 is not None and argmax_ratio1 == argmax_ratio2 and trend_ratio1[argmax_ratio1] > thresholds[0]:
+        prediction = argmax_ratio1 + 2
+
+    return prediction
+
 # Authors: Timo Erkkilä <timo.erkkila@gmail.com>
 #          Antti Lehmussola <antti.lehmussola@gmail.com>
 #          Kornel Kiełczewski <kornel.mail@gmail.com>
