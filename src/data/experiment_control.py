@@ -33,7 +33,7 @@ from sklearn.neighbors import KNeighborsClassifier
 from data.utils import (
     global_covering_index, coverings_vect, coverings_vect_square, clust_acc, silhouette_score,
     calinski_harabasz_score, davies_bouldin_score, bic_fixed,
-    curvature_method, variance_last_reduction, xie_beni_ts, SSE
+    curvature_method, variance_last_reduction, xie_beni_ts, SSE, alg1
 )
 
 from reval.best_nclust_cv import FindBestClustCV
@@ -61,20 +61,41 @@ thresholds = {
 }
 
 def run_clustering(args):
+    """
+    Executes clustering experiments based on the provided arguments.
+    Returns the results and updated DataFrame header.
+    """
     df = args.df.copy()
-    logger.info(f"Loading dataset: {args.dataset} with ICVI: {args.icvi}")
 
+    # Load dataset
+    logger.info(f"Loading dataset: {args.dataset}")
     data = np.load(args.ROOT + "/" + args.dataset, allow_pickle=True)
-    X, y = data[:, :-1], pd.factorize(data[:, -1])[0] + 1
-    X = StandardScaler().fit_transform(X)
-    distance_matrix = pairwise_distances(X)
+    X = data[:, :-1]
+    y = pd.factorize(data[:, -1])[0] + 1
+    
+    n = X.shape[0]
+    d = X.shape[1]
 
     true_k = len(np.unique(y))
     if 'no_structure' in args.dataset:
         true_k = 1
-        y = np.zeros(len(y))
+        y = np.zeros(n)
 
-    clf, config = args.key, args.value
+    X = StandardScaler().fit_transform(X)
+    distance_normalizer = 1 / np.sqrt(25 * d)
+    
+    initial_centers = []
+    clf = args.key
+    config = args.value
+
+    # DataFrame to store clustering results
+    df_predictions = pd.DataFrame(
+        index=['y_' + str(i + 1) for i in range(len(y))],
+        columns=np.arange(1, args.kmax + 1)
+    )
+
+    
+    distance_matrix = pairwise_distances(X)
     args.time = 0
     
     if args.icvi == "reval":
@@ -86,6 +107,7 @@ def run_clustering(args):
         args.time = time.time() - start_time
         args.pred = nbest
     else:
+        sse_values = np.zeros(args.kmax + 1 )
         for k in range(1, args.kmax + 1):
             start_time = time.time()
             best_solution_error = np.inf
@@ -104,11 +126,11 @@ def run_clustering(args):
             if y_best_solution is not None:  # and len(np.unique(y_best_solution)) == k
                 logger.info(f"Storing clustering results for {k} clusters")
 
-
                 Dmat=distance_matrix
                 sse_time_start = time.time()
                 sse_=SSE(X,y_best_solution, centroids)
                 sse_time_end =  time.time()- sse_time_start
+                sse_values[k] = sse_
 
                 if args.icvi == "s":
                     start_time = time.time()
@@ -131,7 +153,7 @@ def run_clustering(args):
 
                 elif args.icvi == "vlr":
                     start_time = time.time()
-                    df['vlr'][k] = variance_last_reduction(y_best_solution, df['sse'][1:k].values, sse_, d=d)
+                    df['vlr'][k] = variance_last_reduction(y_best_solution, sse_values[1:k], sse_, d=d)
                     args.time += time.time() - start_time + sse_time_end
 
                 elif args.icvi == "bic":
@@ -161,7 +183,7 @@ def run_clustering(args):
 
         if args.icvi == "cv":
             start_time = time.time()
-            df['cv'].iloc[1:] = curvature_method(df['sse'].iloc[1:].values)
+            df['cv'].iloc[1:] = curvature_method(sse_values[1:])
             args.pred = select_k_max(df[args.icvi].values)
             args.time += time.time() - start_time
 
