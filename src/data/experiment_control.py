@@ -179,11 +179,10 @@ def run_clustering(args):
                     
                 elif args.icvi == "cv":
                     args.time += sse_time_end
-        print("A")
+
         if args.icvi == "cv":
             start_time = time.time()
-            print(curvature_method(sse_values[1:]))
-            args.pred = select_k_max(curvature_method(sse_values[1:]))
+            args.pred = select_k_max(curvature_method(sse_values))
             args.time += time.time() - start_time
 
         elif args.icvi in {"s", "ch", "bic"}:
