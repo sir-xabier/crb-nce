@@ -181,10 +181,6 @@ def generate_synthetic_datasets(path, n_samples, random_state):
     X, y = datasets.make_moons(n_samples=n_samples, noise=0.05)
     save_dataset(path, "moons", X, y.reshape(-1, 1))
     
-    # Random no-structure dataset
-    X = np.random.rand(n_samples, 2)
-    save_dataset(path, "no_structure", X, np.zeros((n_samples, 1)))
-    
     # Anisotropic blobs
     transformation = np.array([[0.6, -0.6], [-0.4, 0.8]])
     X, y = datasets.make_blobs(n_samples=n_samples, random_state=random_state)
@@ -299,7 +295,7 @@ def generate_scenario_datasets(path, n_blobs, initial_seed, scenarios_file):
 def generate_train_data(path, dim=2, k_low=1, k_high=10, n_samples=500, n_blobs=10,
                         k_max=30, initial_seed=1, val=False, suffix=None, max_pred=28):
     """
-    Generates training data and computes clustering metrics such as SSE, GCI, and inertia.
+    Generates training data and computes clustering metrics such as SSE, mci, and inertia.
 
     Parameters:
     dim (int): Dimensionality of the data.
@@ -332,11 +328,11 @@ def generate_train_data(path, dim=2, k_low=1, k_high=10, n_samples=500, n_blobs=
     inertia[:, -1] = np.array(y)
 
     amplitude = 2 * np.log(10)
-    gci = np.zeros((N, len(K) + 1))
-    gci[:, -1] = np.array(y)
+    mci = np.zeros((N, len(K) + 1))
+    mci[:, -1] = np.array(y)
 
-    gci2 = np.zeros((N, len(K) + 1))
-    gci2[:, -1] = np.array(y)
+    mci2 = np.zeros((N, len(K) + 1))
+    mci2[:, -1] = np.array(y)
     
     for i_d, dataset in enumerate(data):
         X = StandardScaler().fit_transform(dataset)
@@ -354,8 +350,8 @@ def generate_train_data(path, dim=2, k_low=1, k_high=10, n_samples=500, n_blobs=
                 u = coverings_vect(X, centroids, labels, a=amplitude, distance_normalizer=distance_normalizer)
                 u2 = coverings_vect_square(X, centroids, labels, a=amplitude, distance_normalizer=distance_normalizer)
                 
-                gci[i_d,k-1]=global_covering_index(u,function='mean', mode = 0)
-                gci2[i_d,k-1] = global_covering_index(u2,function='mean', mode = 0)
+                mci[i_d,k-1]=global_covering_index(u,function='mean', mode = 0)
+                mci2[i_d,k-1] = global_covering_index(u2,function='mean', mode = 0)
 
     def save_data(file_name, data):
         pd.DataFrame(data, columns=np.arange(len(K) + 1), index=names).to_csv(file_name)
@@ -364,11 +360,11 @@ def generate_train_data(path, dim=2, k_low=1, k_high=10, n_samples=500, n_blobs=
     file_suffix = "_val" if val else ""
 
     # Save metrics
-    for metric, metric_data in zip(["inertia", "sse", "gci", "gci2"], [inertia, sse, gci, gci2]):
+    for metric, metric_data in zip(["inertia", "sse", "mci", "mci2"], [inertia, sse, mci, mci2]):
         save_data(os.path.join(path, f"{metric}_{suffix}{file_suffix}.csv"), metric_data)
 
     # Compute and save trends
-    for index, metric_data in {"sse": sse, "gci": gci, "gci2": gci2}.items():
+    for index, metric_data in {"sse": sse, "mci": mci, "mci2": mci2}.items():
         metric_data = metric_data[:, :-1]
         first_derivative = -1 * np.diff(metric_data, axis=1) if index == 'sse' else np.diff(metric_data, axis=1)
         second_derivative = np.diff(first_derivative, axis=1)

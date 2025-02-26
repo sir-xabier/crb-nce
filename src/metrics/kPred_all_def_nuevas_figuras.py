@@ -5,7 +5,7 @@ from typing import Union
 
 ROOT= os.getcwd()
 
-keymaster=pd.DataFrame(columns=['ID','id_sol','Obs','u_sse','u_gci','u_gci2','metrics','k_max','col_crit','col_k1','algtest','dictest'])
+keymaster=pd.DataFrame(columns=['ID','id_sol','Obs','u_sse','u_mci','u_mci2','metrics','k_max','col_crit','col_k1','algtest','dictest'])
 keymaster.to_csv(ROOT+"/out_files/KeyMaster.csv")
 
 def alg1(ind: np.ndarray, id_value: Union[str, float], thresholds: np.ndarray, mode: str) -> Union[int, float]:
@@ -16,7 +16,7 @@ def alg1(ind: np.ndarray, id_value: Union[str, float], thresholds: np.ndarray, m
     ind (np.ndarray): Input array of indices.
     id_value (Union[str, float]): Identifier value; if 'nan', the function returns np.NAN.
     thresholds (np.ndarray): Thresholds for decision-making, array of length 2.
-    mode (str): Mode for computation; either 'sse' or 'gci'.
+    mode (str): Mode for computation; either 'sse' or 'mci'.
 
     Returns:
     Union[int, float]: Prediction index or np.NAN if `id_value` is 'nan'.
@@ -29,10 +29,10 @@ def alg1(ind: np.ndarray, id_value: Union[str, float], thresholds: np.ndarray, m
     # Compute first and second differences based on the mode
     if mode == 'sse':
         first_diff = -1 * np.diff(ind)
-    elif mode == 'gci':
+    elif mode == 'mci':
         first_diff = np.diff(ind)
     else:
-        raise ValueError("Invalid mode. Supported modes are 'sse' and 'gci'.")
+        raise ValueError("Invalid mode. Supported modes are 'sse' and 'mci'.")
 
     second_diff = np.diff(first_diff)
 
@@ -86,8 +86,8 @@ new_id = len(keymaster.index) + 1
 # Thresholds for alg1 for different modes
 thresholds = {
     'sse': [18.3, 2.5],
-    'gci': [4, 2.2],
-    'gci2': [14.6, 2.4]
+    'mci': [4, 2.2],
+    'mci2': [14.6, 2.4]
 }
 
 # Configuration for k_max (Var, 35, 50)
@@ -99,21 +99,21 @@ id_sol = f"{new_id}{obs}K{k_max_real}"
 crita = ['ch', 'db', 's']
 critb = ['xb', 'bic', 'cv', 'vlr']
 crit_sse = ['sse']
-crit_gci = ['gci']
-crit_gci2 = ['gci2']
+crit_mci = ['mci']
+crit_mci2 = ['mci2']
 
-col_crit = crita + critb + crit_sse + crit_gci + crit_gci2
-col_k1 = ['bic', 'vlr', 'sse', 'gci', 'gci2']
+col_crit = crita + critb + crit_sse + crit_mci + crit_mci2
+col_k1 = ['bic', 'vlr', 'sse', 'mci', 'mci2']
 
 # Define tests and their configurations
 tests = {
     'Sin_m': {
-        'control': ['sse', 'gci', 'gci2'],
+        'control': ['sse', 'mci', 'mci2'],
         'col_test': crita + critb
     }
     # Uncomment and define additional tests as needed
     # 'Con_m': {
-    #     'control': ['ssem', 'gcim_0.5', 'gci2m_0.5'],
+    #     'control': ['ssem', 'mcim_0.5', 'mci2m_0.5'],
     #     'col_test': crita + critbm
     # }
 }
@@ -170,7 +170,7 @@ for config, group in grouped:
         criterion_group["id"] = criterion_group.apply(lambda x: int(x.name.split("_")[-1]), axis=1)
         criterion_group = criterion_group.sort_values("id").iloc[:k_max_real_eff].drop(columns=["id"])
 
-        if "gci" not in criterion:
+        if "mci" not in criterion:
             if criterion in ["db", "xb"]:
                 pred_y = criterion_group.apply(select_k_min, axis=0).values[0]
             elif "vlr" in criterion:
@@ -181,13 +181,13 @@ for config, group in grouped:
                 ).values[0]
             else:  # ch, bic, cv, s
                 pred_y = criterion_group.apply(select_k_max, axis=0).values[0]
-        elif "gci2" in criterion:
+        elif "mci2" in criterion:
             pred_y = criterion_group.apply(
-                lambda x: alg1(ind=x, id_value=x.name, thresholds=thresholds['gci2'], mode='gci'), axis=0
+                lambda x: alg1(ind=x, id_value=x.name, thresholds=thresholds['mci2'], mode='mci'), axis=0
             ).values[0]
-        elif "gci" in criterion:
+        elif "mci" in criterion:
             pred_y = criterion_group.apply(
-                lambda x: alg1(ind=x, id_value=x.name, thresholds=thresholds['gci'], mode='gci'), axis=0
+                lambda x: alg1(ind=x, id_value=x.name, thresholds=thresholds['mci'], mode='mci'), axis=0
             ).values[0]
 
 # Preparation of DataFrame for tables

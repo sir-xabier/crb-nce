@@ -340,14 +340,14 @@ def centroids(X, y):
         centroids = np.vstack((centroids, np.mean(X[y==clust], axis=0)))
     return centroids
 
-def conds_score(gci_,id,u,p=None,c=None,b=None):
+def conds_score(mci_,id,u,p=None,c=None,b=None):
     
     if "nan"==str(id):
         return np.NAN
 
-    k=gci_.shape[0]
-    s_c=1-gci_ #proporción sin cubrimiento total
-    d=np.diff(gci_)
+    k=mci_.shape[0]
+    s_c=1-mci_ #proporción sin cubrimiento total
+    d=np.diff(mci_)
     d2=np.diff(d)
     p_e=d/s_c[:-1] #proporciones que se cubren en cada k
     r_d=d[:-1]/d[1:] # ratio diferencias max_K-2
@@ -404,7 +404,7 @@ def alg1(ind: np.ndarray, id_value: Union[str, float], thresholds: np.ndarray, m
     ind (np.ndarray): Input array of indices.
     id_value (Union[str, float]): Identifier value; if 'nan', the function returns np.NAN.
     thresholds (np.ndarray): Thresholds for decision-making, array of length 2.
-    mode (str): Mode for computation; either 'sse' or 'gci'.
+    mode (str): Mode for computation; either 'sse' or 'mci'.
 
     Returns:
     Union[int, float]: Prediction index or np.NAN if `id_value` is 'nan'.
@@ -417,10 +417,10 @@ def alg1(ind: np.ndarray, id_value: Union[str, float], thresholds: np.ndarray, m
     # Compute first and second differences based on the mode
     if mode == 'sse':
         first_diff = -1 * np.diff(ind)
-    elif mode == 'gci':
+    elif mode == 'mci' or mode == 'mci2':
         first_diff = np.diff(ind)
     else:
-        raise ValueError("Invalid mode. Supported modes are 'sse' and 'gci'.")
+        raise ValueError("Invalid mode. Supported modes are 'sse' and 'mci'.")
 
     second_diff = np.diff(first_diff)
 

@@ -153,8 +153,8 @@ def run_clustering(args):
             df['bic'][k]=bic_fixed(X,y_best_solution, sse_)
             df['xb'][k]=xie_beni_ts(y_best_solution, y_best_solution, sse_)
             
-            df['gci'][k] = global_covering_index(u,function='mean', mode=0)
-            df['gci2'][k] = global_covering_index(u2,function='mean', mode=0)
+            df['mci'][k] = global_covering_index(u,function='mean', mode=0)
+            df['mci2'][k] = global_covering_index(u2,function='mean', mode=0)
              
             if k == true_k:
                 logger.info(f"True number of clusters detected: {true_k}")
@@ -209,7 +209,7 @@ def main():
     # Initialize result DataFrame
     df_columns = {
         's': 0, 'ch': 0, 'db': 0, 'sse': None, 'bic': 0, 'xb': 0, 'cv': 0,
-        'vlr': 0,'gci': 0, 'gci2': 0, 'gcim': 0, 'gci2m': 0, 'acc': np.nan, 'rscore': np.nan, 'adjrscore': np.nan
+        'vlr': 0,'mci': 0, 'mci2': 0, 'mcim': 0, 'mci2m': 0, 'acc': np.nan, 'rscore': np.nan, 'adjrscore': np.nan
     }
 
     args.df = pd.DataFrame({col: np.zeros(args.kmax + 1) if val == 0 else np.full(args.kmax + 1, val) for col, val in df_columns.items()})

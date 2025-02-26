@@ -56,8 +56,8 @@ acc = lambda x: len(np.where(x == 0)[0]) / len(x)
 # Thresholds for alg1
 thresholds = {
     'sse': [18.3, 2.5],
-    'gci': [4, 2.2],
-    'gci2': [14.6, 2.4]
+    'mci': [4, 2.2],
+    'mci2': [14.6, 2.4]
 }
 
 def run_clustering(args):
@@ -93,7 +93,6 @@ def run_clustering(args):
         index=['y_' + str(i + 1) for i in range(len(y))],
         columns=np.arange(1, args.kmax + 1)
     )
-
     
     distance_matrix = pairwise_distances(X)
     args.time = 0
@@ -166,25 +165,25 @@ def run_clustering(args):
                     df['xb'][k] = xie_beni_ts(y_best_solution, y_best_solution, sse_)
                     args.time += time.time() - start_time + sse_time_end
 
-                elif args.icvi == "gci":
+                elif args.icvi == "mci":
                     start_time = time.time()
                     u=coverings_vect(X,centroids,y_best_solution,distance_normalizer=distance_normalizer,Dmat=Dmat)
-                    df['gci'][k] = global_covering_index(u, function='mean', mode=0)
+                    df['mci'][k] = global_covering_index(u, function='mean', mode=0)
                     args.time += time.time() - start_time  
 
-                elif args.icvi == "gci2":
+                elif args.icvi == "mci2":
                     start_time = time.time()
                     u2=coverings_vect_square(X,centroids,y_best_solution,distance_normalizer=distance_normalizer,Dmat=Dmat)
-                    df['gci2'][k] = global_covering_index(u2, function='mean', mode=0)
+                    df['mci2'][k] = global_covering_index(u2, function='mean', mode=0)
                     args.time += time.time() - start_time  
                     
                 elif args.icvi == "cv":
                     args.time += sse_time_end
-
+        print("A")
         if args.icvi == "cv":
             start_time = time.time()
-            df['cv'].iloc[1:] = curvature_method(sse_values[1:])
-            args.pred = select_k_max(df[args.icvi].values)
+            print(curvature_method(sse_values[1:]))
+            args.pred = select_k_max(curvature_method(sse_values[1:]))
             args.time += time.time() - start_time
 
         elif args.icvi in {"s", "ch", "bic"}:
@@ -202,7 +201,7 @@ def run_clustering(args):
             args.pred = select_k_vlr(df[args.icvi].values)
             args.time += time.time() - start_time
 
-        elif args.icvi in {"sse", "gci", "gci2"}:
+        elif args.icvi in {"sse", "mci", "mci2"}:
             start_time = time.time()
             args.pred = alg1(
                 ind=df[args.icvi].values,
