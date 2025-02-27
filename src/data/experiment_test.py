@@ -136,6 +136,8 @@ def run_clustering(args):
 
             df_predictions[k] = y_best_solution
             
+            centroids = np.array([X[y_best_solution == i].mean(axis=0) for i in range(k)])
+
             Dmat=distance_matrix
         
             u=coverings_vect(X,centroids,y_best_solution,distance_normalizer=distance_normalizer,Dmat=Dmat)

@@ -24,7 +24,7 @@ from data.utils import KMedoids
 from sklearn.cluster import kmeans_plusplus
 from sklearn.metrics import rand_score, adjusted_rand_score
 from sklearn.metrics.pairwise import pairwise_distances
-
+from scipy.spatial import distance_matrix
 from sklearn.model_selection import train_test_split
 from sklearn.neighbors import KNeighborsClassifier
 
@@ -94,13 +94,12 @@ def run_clustering(args):
         columns=np.arange(1, args.kmax + 1)
     )
     
-    distance_matrix = pairwise_distances(X)
     args.time = 0
     
     if args.icvi == "reval":
         X_train, _, y_train, _ = train_test_split(X, y, test_size=0.30, random_state=args.seed, stratify=y)
         start_time = time.time()
-        findbestclust = FindBestClustCV(nfold=2, nclust_range=list(range(1, min(X_train.shape[0], args.kmax + 1))),
+        findbestclust = FindBestClustCV(nfold=2, nclust_range=list(range(1, args.kmax + 1)),
                                         s=KNeighborsClassifier(), c=clf(**config), nrand=100)
         _, nbest = findbestclust.best_nclust(X_train, iter_cv=10, strat_vect=y_train)
         args.time = time.time() - start_time
@@ -118,14 +117,17 @@ def run_clustering(args):
                 if model.inertia_ < best_solution_error:
                     best_solution_error = model.inertia_
                     y_best_solution = model.labels_
-                    centroids = model.cluster_centers_
+
             
             args.time += time.time() - start_time
             
-            if y_best_solution is not None:  # and len(np.unique(y_best_solution)) == k
+            if y_best_solution is not None and len(np.unique(y_best_solution)) == k:  
                 logger.info(f"Storing clustering results for {k} clusters")
+                
+                centroids = np.array([X[y_best_solution == i].mean(axis=0) for i in range(k)])
 
-                Dmat=distance_matrix
+                Dmat=distance_matrix(X, centroids)
+
                 sse_time_start = time.time()
                 sse_=SSE(X,y_best_solution, centroids)
                 sse_time_end =  time.time()- sse_time_start
@@ -200,7 +202,7 @@ def run_clustering(args):
             args.pred = select_k_vlr(df[args.icvi].values)
             args.time += time.time() - start_time
 
-        elif args.icvi in {"sse", "mci", "mci2"}:
+        elif args.icvi in {"sse", "mci", "mci2"}:   
             start_time = time.time()
             args.pred = alg1(
                 ind=df[args.icvi].values,
@@ -214,7 +216,7 @@ def run_clustering(args):
 
 def run_experiment(args):
     dataset_name = os.path.basename(args.dataset).replace(".npy", "")
-    exp_name = f"./results_control/{dataset_name}-{args.icvi}-{args.key.__name__}_{args.n_init}_{args.kmax}_{args.seed}.txt"
+    exp_name = f"./results_control/{dataset_name}-{args.icvi}-{args.key.__name__}-{args.kmax}-{args.seed}.txt"
     
     if os.path.exists(exp_name):
         logger.info(f"Experiment {exp_name} already exists. Skipping.")
@@ -238,14 +240,14 @@ def main():
     parser.add_argument("-icvi", type=str, required=True, help="The name of the ICVI")
     parser.add_argument("--seed", type=int, default=31416, help="Random seed")
     parser.add_argument("--n_init", type=int, default=10, help="Number of initialization runs")
-    parser.add_argument("--kmax", type=int, default=50, help="Maximum number of clusters")
-    parser.add_argument("--maxiter", type=int, default=100, help="Maximum iterations for clustering algorithms")
+    parser.add_argument("--kmax", type=int, default=35, help="Maximum number of clusters")
+    parser.add_argument("--maxiter", type=int, default=300, help="Maximum iterations for clustering algorithms")
     args = parser.parse_args()
     
     args.kmeans_pp = lambda X, c, s: kmeans_plusplus(X, n_clusters=c, random_state=s)[0]
     args.ROOT = os.getcwd()
     
-    classifiers = {KMeans: {'max_iter': args.maxiter, 'n_init': 1, 'random_state': args.seed}}
+    classifiers = {KMeans: {'max_iter': args.maxiter, 'random_state': args.seed}}
     df_columns = {args.icvi: 0}
     args.df = pd.DataFrame({col: np.zeros(args.kmax + 1) for col in df_columns})
     
