@@ -55,9 +55,9 @@ acc = lambda x: len(np.where(x == 0)[0]) / len(x)
 
 # Thresholds for alg1
 thresholds = {
-    'sse': [18.3, 2.5],
-    'mci': [4, 2.2],
-    'mci2': [14.6, 2.4]
+    'sse': [10.619680019045864, 2.557468209276479],
+    'mci': [4.851226027791506, 2.7240305218131553],
+    'mci2': [10.21417873456845, 2.533375135591802]
 }
 
 def run_clustering(args):
@@ -100,7 +100,7 @@ def run_clustering(args):
     if args.icvi == "reval":
         X_train, _, y_train, _ = train_test_split(X, y, test_size=0.30, random_state=args.seed, stratify=y)
         start_time = time.time()
-        findbestclust = FindBestClustCV(nfold=2, nclust_range=list(range(1, args.kmax + 1)),
+        findbestclust = FindBestClustCV(nfold=2, nclust_range=list(range(1, np.max(X_train.shape[0], args.kmax + 1))),
                                         s=KNeighborsClassifier(), c=clf(**config), nrand=100)
         _, nbest = findbestclust.best_nclust(X_train, iter_cv=10, strat_vect=y_train)
         args.time = time.time() - start_time
@@ -204,7 +204,6 @@ def run_clustering(args):
             start_time = time.time()
             args.pred = alg1(
                 ind=df[args.icvi].values,
-                id_value=df[args.icvi].index,
                 thresholds=thresholds[args.icvi],
                 mode=args.icvi
             )
