@@ -100,7 +100,7 @@ def run_clustering(args):
     if args.icvi == "reval":
         X_train, _, y_train, _ = train_test_split(X, y, test_size=0.30, random_state=args.seed, stratify=y)
         start_time = time.time()
-        findbestclust = FindBestClustCV(nfold=2, nclust_range=list(range(1, np.max(X_train.shape[0], args.kmax + 1))),
+        findbestclust = FindBestClustCV(nfold=2, nclust_range=list(range(1, min(X_train.shape[0], args.kmax + 1))),
                                         s=KNeighborsClassifier(), c=clf(**config), nrand=100)
         _, nbest = findbestclust.best_nclust(X_train, iter_cv=10, strat_vect=y_train)
         args.time = time.time() - start_time
@@ -214,7 +214,7 @@ def run_clustering(args):
 
 def run_experiment(args):
     dataset_name = os.path.basename(args.dataset).replace(".npy", "")
-    exp_name = f"./results/{dataset_name}-{args.icvi}-{args.key.__name__}_{args.n_init}_{args.kmax}_{args.seed}.txt"
+    exp_name = f"./results_control/{dataset_name}-{args.icvi}-{args.key.__name__}_{args.n_init}_{args.kmax}_{args.seed}.txt"
     
     if os.path.exists(exp_name):
         logger.info(f"Experiment {exp_name} already exists. Skipping.")

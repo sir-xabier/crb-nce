@@ -175,7 +175,7 @@ def run_clustering(args):
 
 def run_experiment(args):
     dataset_name = args.dataset.split("/")[-1][:-4]
-    exp_name = f"./results/{dataset_name}-{args.key.__name__}_{args.n_init}_{args.kmax}_{args.seed}.npy"
+    exp_name = f"./results_test/{dataset_name}-{args.key.__name__}_{args.n_init}_{args.kmax}_{args.seed}.npy"
     if os.path.exists(exp_name):
         logger.info(f"Experiment {exp_name} already exists. Skipping.")
     else:

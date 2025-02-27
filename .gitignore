@@ -167,6 +167,8 @@ datasets/
 genetic/
 results/
 out_files/
+results_test/
+results_control/
 
 # Specific files to ignore
 best_solutions.csv

@@ -427,7 +427,8 @@ if __name__ == "__main__":
         "./datasets",
         "./datasets/train",
         "./datasets/val",
-        "./results",
+        "./results_control",
+        "./results_test",
         "./out_files",
         "./genetic"
     ])

@@ -20,7 +20,6 @@ def load_header_as_str_array(header_file="header.txt"):
     else:
         print(f"Header file '{header_file}' not found.")
         return None
-     
 
 def process_file(file_path, metrics, filename):
     """
