@@ -65,7 +65,6 @@ def run_clustering(args):
     Executes clustering experiments based on the provided arguments.
     Returns the results and updated DataFrame header.
     """
-    df = args.df.copy()
 
     # Load dataset
     logger.info(f"Loading dataset: {args.dataset}")
@@ -80,6 +79,18 @@ def run_clustering(args):
     if 'no_structure' in args.dataset:
         true_k = 1
         y = np.zeros(n)
+
+    if args.kmax == 1:
+        if true_k <= 5:
+            args.kmax = 15
+        elif true_k <= 9:
+            args.kmax = 25
+        else:
+            args.kmax = 35
+            
+        df_columns = {args.icvi: 0}
+        args.df = pd.DataFrame({col: np.zeros(args.kmax) for col in df_columns})
+    df = args.df.copy()
 
     X = StandardScaler().fit_transform(X)
     distance_normalizer = 1 / np.sqrt(25 * d)
@@ -135,48 +146,48 @@ def run_clustering(args):
 
                 if args.icvi == "s":
                     start_time = time.time()
-                    df['s'][k] = silhouette_score(X, y_best_solution)
+                    df['s'][k-1] = silhouette_score(X, y_best_solution)
                     args.time += time.time() - start_time 
 
                 elif args.icvi == "ch":
                     start_time = time.time()
-                    df['ch'][k] = calinski_harabasz_score(X, y_best_solution)
+                    df['ch'][k-1] = calinski_harabasz_score(X, y_best_solution)
                     args.time += time.time() - start_time 
 
                 elif args.icvi == "db":
                     start_time = time.time()
-                    df['db'][k] = davies_bouldin_score(X, y_best_solution)
+                    df['db'][k-1] = davies_bouldin_score(X, y_best_solution)
                     args.time += time.time() - start_time 
 
                 elif args.icvi == "sse":
-                    df['sse'][k] = sse_ 
+                    df['sse'][k-1] = sse_ 
                     args.time += sse_time_end
 
                 elif args.icvi == "vlr":
                     start_time = time.time()
-                    df['vlr'][k] = variance_last_reduction(y_best_solution, sse_values[1:k], sse_, d=d)
+                    df['vlr'][k-1] = variance_last_reduction(y_best_solution, sse_values[1:k], sse_, d=d)
                     args.time += time.time() - start_time + sse_time_end
 
                 elif args.icvi == "bic":
                     start_time = time.time()
-                    df['bic'][k] = bic_fixed(X, y_best_solution, sse_)
+                    df['bic'][k-1] = bic_fixed(X, y_best_solution, sse_)
                     args.time += time.time() - start_time + sse_time_end
 
                 elif args.icvi == "xb":
                     start_time = time.time()
-                    df['xb'][k] = xie_beni_ts(y_best_solution, y_best_solution, sse_)
+                    df['xb'][k-1] = xie_beni_ts(y_best_solution, y_best_solution, sse_)
                     args.time += time.time() - start_time + sse_time_end
 
                 elif args.icvi == "mci":
                     start_time = time.time()
                     u=coverings_vect(X,centroids,y_best_solution,distance_normalizer=distance_normalizer,Dmat=Dmat)
-                    df['mci'][k] = global_covering_index(u, function='mean', mode=0)
+                    df['mci'][k-1] = global_covering_index(u, function='mean', mode=0)
                     args.time += time.time() - start_time  
 
                 elif args.icvi == "mci2":
                     start_time = time.time()
                     u2=coverings_vect_square(X,centroids,y_best_solution,distance_normalizer=distance_normalizer,Dmat=Dmat)
-                    df['mci2'][k] = global_covering_index(u2, function='mean', mode=0)
+                    df['mci2'][k-1] = global_covering_index(u2, function='mean', mode=0)
                     args.time += time.time() - start_time  
                     
                 elif args.icvi == "cv":
@@ -189,6 +200,7 @@ def run_clustering(args):
 
         elif args.icvi in {"s", "ch", "bic"}:
             start_time = time.time()
+            print(df[args.icvi].values, select_k_max(df[args.icvi].values))
             args.pred = select_k_max(df[args.icvi].values)
             args.time += time.time() - start_time
 
@@ -249,7 +261,7 @@ def main():
     
     classifiers = {KMeans: {'max_iter': args.maxiter, 'random_state': args.seed}}
     df_columns = {args.icvi: 0}
-    args.df = pd.DataFrame({col: np.zeros(args.kmax + 1) for col in df_columns})
+    args.df = pd.DataFrame({col: np.zeros(args.kmax) for col in df_columns})
     
     for clf, config in classifiers.items():
         args.key, args.value = clf, config

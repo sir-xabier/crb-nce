@@ -12,8 +12,8 @@ for folder in "datasets/control"; do
                 -icvi "$icvi" \
                 --seed 31416 \
                 --n_init 10 \
-                --kmax 50 \
-                --maxiter 100
+                --kmax 1 \
+                --maxiter 300
         done
     done
 done
