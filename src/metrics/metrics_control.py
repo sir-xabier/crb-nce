@@ -17,8 +17,8 @@ for filename in os.listdir(results_folder):
         parts = filename.split("-")
         dataset = parts[0]
         icvi = parts[1]
-        method = parts[2].split("_")[0]  # Extract method before "_"
-
+        method = parts[2]  # Extract method before "_"
+        kmax= parts[3]
         # Read the JSON content inside the file
         with open(file_path, "r") as file:
             content = json.load(file)
@@ -28,6 +28,7 @@ for filename in os.listdir(results_folder):
             "Dataset": dataset,
             "ICVI": icvi,
             "Method": method,
+            "Kmax":kmax,
             "Time Taken": content["time"],
             "Predicted k": content["predicted_k"],
             "True k": content["true_k"],
@@ -38,11 +39,13 @@ for filename in os.listdir(results_folder):
 df = pd.DataFrame(data)
 
 # Compute summary statistics
-accuracy_table = df.groupby(["ICVI", "Method"]).agg(
+accuracy_table = df.groupby(["ICVI", "Kmax"]).agg(
     Accuracy=("Correct Prediction", "mean")
 ).reset_index()
 
-time_table = df.groupby(["ICVI", "Method"]).agg(
+accuracy_table = accuracy_table.sort_values(by="Accuracy", ascending=False)
+
+time_table = df.groupby(["ICVI"]).agg(
     Avg_Time=("Time Taken", "mean")
 ).reset_index()
 
