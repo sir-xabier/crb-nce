@@ -163,9 +163,8 @@ cython_debug/
 #Ignore vscode env
 .vscode/
 
-datasets/
-genetic/
-results/
+datasets/*
+results/*
 out_files/
 Fs/
 
