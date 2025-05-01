@@ -37,7 +37,7 @@ for filename in os.listdir(results_folder):
 
 # Convert to DataFrame
 df = pd.DataFrame(data)
-
+df.to_csv("./out_files/results_control.csv", index=False)
 # Compute summary statistics
 accuracy_table = df.groupby(["ICVI", "Kmax"]).agg(
     Accuracy=("Correct Prediction", "mean")
