@@ -167,6 +167,7 @@ datasets/*
 results/*
 out_files/
 Fs/
+cache_clusters/
 
 # Specific files to ignore
 best_solutions.csv
