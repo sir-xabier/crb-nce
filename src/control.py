@@ -28,6 +28,9 @@ from scipy.spatial import distance_matrix
 from sklearn.model_selection import train_test_split
 from sklearn.neighbors import KNeighborsClassifier
 
+from joblib import dump, load
+import hashlib
+
 
 # Cluster evaluation modules
 from utils import (
@@ -125,102 +128,147 @@ def run_clustering(args):
             ind = np.triu_indices(N,1)
             dist = pairwise_distances(X)[ind]
             args.time += time.time() - start_time  
+            
+        # caching dir
+        cache_dir = os.path.join(args.ROOT, "cache_clusters")
+        os.makedirs(cache_dir, exist_ok=True)
+        dataset_basename = os.path.splitext(os.path.basename(args.dataset))[0]
 
         for k in range(1, args.kmax + 1):
-            start_time = time.time()
+
+            config_hash = hashlib.md5(json.dumps(config, sort_keys=True).encode()).hexdigest()[:8]
+            cache_name = f"{dataset_basename}_{clf.__name__}_k{k}_seed{args.seed}_cfg{config_hash}.joblib"
+            cache_path = os.path.join(cache_dir, cache_name)
+
+            y_best_solution = None
             best_solution_error = np.inf
-            
-            for i in range(args.n_init):
-                initial_center = args.kmeans_pp(X, k, args.seed + i)
-                model = clf(n_clusters=k, init=initial_center, **config).fit(X)
+
+            # If cache exists, load it (and account for load time)
+            if os.path.exists(cache_path):
+                start_load = time.time()
+                try:
+                    cached = load(cache_path)
+                    args.time += time.time() - start_load
+                    # extract cached items
+                    y_best_solution = cached.get("labels", None)
+                    centroids = cached.get("centroids", None)
+                    best_solution_error = cached.get("inertia", np.inf)
+                    logger.info(f"Loaded cached clustering for k={k} from {cache_path}")
+                except Exception as e:
+                    # if load fails, fall back to recomputing
+                    args.time += time.time() - start_load
+                    logger.warning(f"Failed loading cache {cache_path}: {e}. Will recompute.")
+
+            # If not loaded from cache, compute (same as before) and save
+            if y_best_solution is None:
+                for i in range(args.n_init):
+                    start_time = time.time()
+                    initial_center = args.kmeans_pp(X, k, args.seed + i)
+                    model = clf(n_clusters=k, init=initial_center, **config).fit(X)
+                    args.time += time.time() - start_time
+
+                    if model.inertia_ < best_solution_error:
+                        best_solution_error = model.inertia_
+                        y_best_solution = model.labels_
+
+                        # compute centroids now (to be saved)
+                        centroids = np.array([X[y_best_solution == j].mean(axis=0) for j in range(k)])
+
+                # Save to cache for later runs (only if we found a valid solution)
+                if y_best_solution is not None and len(np.unique(y_best_solution)) == k:
+                    try:
+                        dump({"labels": y_best_solution, "centroids": centroids, "inertia": best_solution_error}, cache_path, compress=3)
+                        logger.info(f"Saved clustering cache to {cache_path}")
+                    except Exception as e:
+                        logger.warning(f"Failed to save cache {cache_path}: {e}" )  
+ 
                 
-                if model.inertia_ < best_solution_error:
-                    best_solution_error = model.inertia_
-                    y_best_solution = model.labels_
-
-            
-            args.time += time.time() - start_time
-            
-            if y_best_solution is not None and len(np.unique(y_best_solution)) == k:  
-                logger.info(f"Storing clustering results for {k} clusters")
+            # If we still don't have a valid clustering or labels don't match expected k, skip
+            if y_best_solution is None or len(np.unique(y_best_solution)) != k:
+                logger.warning(f"No valid clustering with k={k}; skipping ICVI calculations for this k.")
+                continue
                 
-                centroids = np.array([X[y_best_solution == i].mean(axis=0) for i in range(k)])
+            Dmat=distance_matrix(X, centroids)
+            
+            sse_time_start = time.time()
+            sse_=SSE(X,y_best_solution, centroids)
+            sse_time_end =  time.time()- sse_time_start
+            sse_values[k] = sse_
 
-                Dmat=distance_matrix(X, centroids)
+            if args.icvi == "s":
+                start_time = time.time()
+                df['s'][k-1] = silhouette_score(X, y_best_solution)
+                args.time += time.time() - start_time 
+
+            elif args.icvi == "ch":
+                start_time = time.time()
+                df['ch'][k-1] = calinski_harabasz_score(X, y_best_solution)
+                args.time += time.time() - start_time 
+
+            elif args.icvi == "db":
+                start_time = time.time()
+                df['db'][k-1] = davies_bouldin_score(X, y_best_solution)
+                args.time += time.time() - start_time 
+
+            elif args.icvi == "sse":
+                df['sse'][k-1] = sse_ 
+                args.time += sse_time_end
+
+            elif args.icvi == "vlr":
+                start_time = time.time()
+                df['vlr'][k-1] = variance_last_reduction(y_best_solution, sse_values[1:k], sse_, d=d)
+                args.time += time.time() - start_time + sse_time_end
+
+            elif args.icvi == "bic":
+                start_time = time.time()
+                df['bic'][k-1] = bic_fixed(X, y_best_solution, sse_)
+                args.time += time.time() - start_time + sse_time_end
+
+            elif args.icvi == "ts":
+                start_time = time.time()
+                df['ts'][k-1] = xie_beni_ts(y_best_solution, y_best_solution, sse_)
+                args.time += time.time() - start_time + sse_time_end
+
+            elif args.icvi == "mci":
+                start_time = time.time()
+                u=coverings_vect(X,centroids,y_best_solution,distance_normalizer=distance_normalizer,Dmat=Dmat)
+                df['mci'][k-1] = global_covering_index(u, function='mean', mode=0)
+                args.time += time.time() - start_time  
+
+            elif args.icvi == "mci2":
+                start_time = time.time()
+                u2=coverings_vect_square(X,centroids,y_best_solution,distance_normalizer=distance_normalizer,Dmat=Dmat)
+                df['mci2'][k-1] = global_covering_index(u2, function='mean', mode=0)
+                args.time += time.time() - start_time  
                 
-                sse_time_start = time.time()
-                sse_=SSE(X,y_best_solution, centroids)
-                sse_time_end =  time.time()- sse_time_start
-                sse_values[k] = sse_
-
-                if args.icvi == "s":
-                    start_time = time.time()
-                    df['s'][k-1] = silhouette_score(X, y_best_solution)
-                    args.time += time.time() - start_time 
-
-                elif args.icvi == "ch":
-                    start_time = time.time()
-                    df['ch'][k-1] = calinski_harabasz_score(X, y_best_solution)
-                    args.time += time.time() - start_time 
-
-                elif args.icvi == "db":
-                    start_time = time.time()
-                    df['db'][k-1] = davies_bouldin_score(X, y_best_solution)
-                    args.time += time.time() - start_time 
-
-                elif args.icvi == "sse":
-                    df['sse'][k-1] = sse_ 
-                    args.time += sse_time_end
-
-                elif args.icvi == "vlr":
-                    start_time = time.time()
-                    df['vlr'][k-1] = variance_last_reduction(y_best_solution, sse_values[1:k], sse_, d=d)
-                    args.time += time.time() - start_time + sse_time_end
-
-                elif args.icvi == "bic":
-                    start_time = time.time()
-                    df['bic'][k-1] = bic_fixed(X, y_best_solution, sse_)
-                    args.time += time.time() - start_time + sse_time_end
-
-                elif args.icvi == "ts":
-                    start_time = time.time()
-                    df['ts'][k-1] = xie_beni_ts(y_best_solution, y_best_solution, sse_)
-                    args.time += time.time() - start_time + sse_time_end
-
-                elif args.icvi == "mci":
-                    start_time = time.time()
-                    u=coverings_vect(X,centroids,y_best_solution,distance_normalizer=distance_normalizer,Dmat=Dmat)
-                    df['mci'][k-1] = global_covering_index(u, function='mean', mode=0)
-                    args.time += time.time() - start_time  
-
-                elif args.icvi == "mci2":
-                    start_time = time.time()
-                    u2=coverings_vect_square(X,centroids,y_best_solution,distance_normalizer=distance_normalizer,Dmat=Dmat)
-                    df['mci2'][k-1] = global_covering_index(u2, function='mean', mode=0)
-                    args.time += time.time() - start_time  
+            elif args.icvi == "tcr":
+                start_time = time.time()
+                df['tcr'][k-1] = TCR(y_best_solution, centroids, sse_)
+                args.time += time.time() - start_time  
                     
-                elif args.icvi == "tcr":
-                    start_time = time.time()
-                    df['tcr'][k-1] = TCR(y_best_solution, centroids, sse_)
-                    args.time += time.time() - start_time  
-                        
-                elif args.icvi == "nci":
-                    start_time = time.time()
-                    nc = NC(X = X, y= y_best_solution, centroids= centroids, d = dist, ind = ind)
-                    nc_values.append(nc)
-                    args.time += time.time() - start_time  
-                    
-                elif args.icvi == "cv":
-                    args.time += sse_time_end
+            elif args.icvi == "nci":
+                start_time = time.time()
+                if y_best_solution.max() == 34:
+                    print()
+                nc = NC(X = X, y= y_best_solution, centroids= centroids, d = dist, ind = ind)
+                nc_values.append(nc)
+                args.time += time.time() - start_time  
+                
+            elif args.icvi == "cv":
+                args.time += sse_time_end
 
         if args.icvi == "cv":
             start_time = time.time()
-            args.pred = select_k_max(curvature_method(sse_values))
+            cv = curvature_method(sse_values)
+            cv = np.array([np.nan if x is None else x for x in cv], dtype=float)
+            args.pred = select_k_max(cv)
             args.time += time.time() - start_time
 
         if args.icvi == "nci":
             start_time = time.time()
-            args.pred = select_k_max(NCI(nc, args.kmax))
+            nci = NCI(nc_values, args.kmax)
+            nci = np.array([np.nan if x is None else x for x in nci], dtype=float)
+            args.pred = select_k_max(nci)
             args.time += time.time() - start_time
 
 
@@ -274,8 +322,8 @@ def run_experiment(args):
 
 def main():
     parser = argparse.ArgumentParser(description="Run clustering experiments.")
-    parser.add_argument("-dataset", type=str, required=True, help="Path to the dataset file")
-    parser.add_argument("-icvi", type=str, required=True, help="The name of the ICVI")
+    parser.add_argument("-dataset", type=str, default="2d-3c-no123.npy", help="Path to the dataset file")
+    parser.add_argument("-icvi", type=str, default="nci", help="The name of the ICVI")
     parser.add_argument("--seed", type=int, default=31416, help="Random seed")
     parser.add_argument("--n_init", type=int, default=10, help="Number of initialization runs")
     parser.add_argument("--kmax", type=int, default=35, help="Maximum number of clusters")
