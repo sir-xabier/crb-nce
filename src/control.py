@@ -143,51 +143,56 @@ def run_clustering(args):
             y_best_solution = None
             best_solution_error = np.inf
 
-            # If cache exists, load it (and account for load time)
+            # Load cache if exists
             if os.path.exists(cache_path):
                 start_load = time.time()
                 try:
                     cached = load(cache_path)
-                    args.time += time.time() - start_load
-                    # extract cached items
                     y_best_solution = cached.get("labels", None)
                     centroids = cached.get("centroids", None)
                     best_solution_error = cached.get("inertia", np.inf)
-                    logger.info(f"Loaded cached clustering for k={k} from {cache_path}")
+                    model_fit_time = cached.get("fit_time", 0.0)
+                    args.time += time.time() - start_load + model_fit_time  # add load + original fit time
+                    logger.info(f"Loaded cached clustering for k={k}, included original fit time")
                 except Exception as e:
-                    # if load fails, fall back to recomputing
-                    args.time += time.time() - start_load
+                    
                     logger.warning(f"Failed loading cache {cache_path}: {e}. Will recompute.")
 
-            # If not loaded from cache, compute (same as before) and save
+            # Compute clustering if not cached
             if y_best_solution is None:
+                total_fit_time = 0.0
+               
                 for i in range(args.n_init):
                     start_time = time.time()
                     initial_center = args.kmeans_pp(X, k, args.seed + i)
                     model = clf(n_clusters=k, init=initial_center, **config).fit(X)
-                    args.time += time.time() - start_time
+                    iter_time = time.time() - start_time
+                    total_fit_time += iter_time/args.n_init  # sum over all initializations
 
                     if model.inertia_ < best_solution_error:
                         best_solution_error = model.inertia_
                         y_best_solution = model.labels_
-
-                        # compute centroids now (to be saved)
                         centroids = np.array([X[y_best_solution == j].mean(axis=0) for j in range(k)])
-
-                # Save to cache for later runs (only if we found a valid solution)
-                if y_best_solution is not None and len(np.unique(y_best_solution)) == k:
-                    try:
-                        dump({"labels": y_best_solution, "centroids": centroids, "inertia": best_solution_error}, cache_path, compress=3)
-                        logger.info(f"Saved clustering cache to {cache_path}")
-                    except Exception as e:
-                        logger.warning(f"Failed to save cache {cache_path}: {e}" )  
  
-                
-            # If we still don't have a valid clustering or labels don't match expected k, skip
+                args.time += total_fit_time  # add fit time once
+
+                # Save clustering + total fit time to cache
+                try:
+                    dump({
+                        "labels": y_best_solution,
+                        "centroids": centroids,
+                        "inertia": best_solution_error,
+                        "fit_time": total_fit_time
+                    }, cache_path, compress=3)
+                    logger.info(f"Saved clustering cache to {cache_path}")
+                except Exception as e:
+                    logger.warning(f"Failed to save cache {cache_path}: {e}")
+
+            # Validate clustering
             if y_best_solution is None or len(np.unique(y_best_solution)) != k:
                 logger.warning(f"No valid clustering with k={k}; skipping ICVI calculations for this k.")
                 continue
-                
+
             Dmat=distance_matrix(X, centroids)
             
             sse_time_start = time.time()

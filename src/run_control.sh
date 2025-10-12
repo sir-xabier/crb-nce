@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Define the list of ICVIs (Internal Cluster Validity Indices)
-ICVIS=("nci" "tcr" "mci2" "mci" "cv" "s" "ch" "db" "sse" "vlr" "bic" "ts") # "reval" 
+ICVIS=("nci" "tcr" "mci2" "mci" "cv" "s" "ch" "db" "sse" "vlr" "bic" "ts" "reval") 
 # Iterate over datasets and ICVIs
 for folder in "datasets/control"; do
     for dataset in "$folder"/*; do
