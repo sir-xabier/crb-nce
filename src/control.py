@@ -33,7 +33,7 @@ from sklearn.neighbors import KNeighborsClassifier
 from utils import (
     global_covering_index, coverings_vect, coverings_vect_square, silhouette_score,
     calinski_harabasz_score, davies_bouldin_score, bic_fixed,
-    curvature_method, variance_last_reduction, xie_beni_ts, SSE, alg1
+    curvature_method, variance_last_reduction, xie_beni_ts, SSE, alg1, TCR, NCI, NC
 )
 
 from reval.best_nclust_cv import FindBestClustCV
@@ -117,6 +117,15 @@ def run_clustering(args):
         args.pred = nbest
     else:
         sse_values = np.zeros(args.kmax + 1 )
+        
+        if  args.icvi == "nci":
+            start_time = time.time()                    
+            nc_values = []
+            N = X.shape[0]
+            ind = np.triu_indices(N,1)
+            dist = pairwise_distances(X)[ind]
+            args.time += time.time() - start_time  
+
         for k in range(1, args.kmax + 1):
             start_time = time.time()
             best_solution_error = np.inf
@@ -138,7 +147,7 @@ def run_clustering(args):
                 centroids = np.array([X[y_best_solution == i].mean(axis=0) for i in range(k)])
 
                 Dmat=distance_matrix(X, centroids)
-
+                
                 sse_time_start = time.time()
                 sse_=SSE(X,y_best_solution, centroids)
                 sse_time_end =  time.time()- sse_time_start
@@ -173,9 +182,9 @@ def run_clustering(args):
                     df['bic'][k-1] = bic_fixed(X, y_best_solution, sse_)
                     args.time += time.time() - start_time + sse_time_end
 
-                elif args.icvi == "xb":
+                elif args.icvi == "ts":
                     start_time = time.time()
-                    df['xb'][k-1] = xie_beni_ts(y_best_solution, y_best_solution, sse_)
+                    df['ts'][k-1] = xie_beni_ts(y_best_solution, y_best_solution, sse_)
                     args.time += time.time() - start_time + sse_time_end
 
                 elif args.icvi == "mci":
@@ -190,6 +199,17 @@ def run_clustering(args):
                     df['mci2'][k-1] = global_covering_index(u2, function='mean', mode=0)
                     args.time += time.time() - start_time  
                     
+                elif args.icvi == "tcr":
+                    start_time = time.time()
+                    df['tcr'][k-1] = TCR(y_best_solution, centroids, sse_)
+                    args.time += time.time() - start_time  
+                        
+                elif args.icvi == "nci":
+                    start_time = time.time()
+                    nc = NC(X = X, y= y_best_solution, centroids= centroids, d = dist, ind = ind)
+                    nc_values.append(nc)
+                    args.time += time.time() - start_time  
+                    
                 elif args.icvi == "cv":
                     args.time += sse_time_end
 
@@ -198,13 +218,19 @@ def run_clustering(args):
             args.pred = select_k_max(curvature_method(sse_values))
             args.time += time.time() - start_time
 
+        if args.icvi == "nci":
+            start_time = time.time()
+            args.pred = select_k_max(NCI(nc, args.kmax))
+            args.time += time.time() - start_time
+
+
         elif args.icvi in {"s", "ch", "bic"}:
             start_time = time.time()
             print(df[args.icvi].values, select_k_max(df[args.icvi].values))
             args.pred = select_k_max(df[args.icvi].values)
             args.time += time.time() - start_time
 
-        elif args.icvi in {"db", "xb"}:
+        elif args.icvi in {"db", "ts", "tcr"}:
             start_time = time.time()
             args.pred = select_k_min(df[args.icvi].values)
             args.time += time.time() - start_time

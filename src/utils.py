@@ -3,7 +3,7 @@ import os
 import numpy as np
 
 from typing import Generator, List, Union
-
+   
 from scipy.spatial import distance_matrix
 from sklearn.metrics import silhouette_score as sc
 from sklearn.metrics import calinski_harabasz_score as chc
@@ -255,6 +255,79 @@ def variance_last_reduction(y, sse_list, sse,d):
     return np.sqrt(sse  / (((N - K) / K**(2/d)) * sse_fixed))
 
 
+def TCR(y, centroids, sse):
+    
+    if np.amax(y) == 0:
+        return None
+    else: 
+    
+        N = len(y)
+        K = len(np.unique(y))
+        fcp = sse/N
+        
+        v = np.mean(centroids,axis=0).reshape(1,-1)
+        Fm1 = N*np.sum(pairwise_distances(centroids,v,'sqeuclidean'))/(K-1)
+        
+        ind = np.triu_indices(K,1)
+        dist_vect = pairwise_distances(centroids,metric='sqeuclidean')[ind]
+        Fm2 = np.mean(dist_vect)
+        
+        Fm3 = np.min(dist_vect)
+        fsp = Fm1*Fm2*Fm3
+        if np.abs(fsp) < 1e-14:
+            return np.inf
+        else:
+            return fcp/fsp
+
+
+def NC(X,y,centroids,d,ind):
+    K = len(np.unique(y))
+    
+    if K == 1:
+        d_v = distance_matrix(X,centroids)#.reshape(N,1)
+        return np.std(d_v)/(np.max(d_v) - np.min(d_v))
+    else:
+        cK = pairwise_distances(centroids[y])[ind]
+        return np.corrcoef(d,cK)[0,1]
+
+
+def NCI1(k,nc):
+    if nc[k + 1] - nc[k] > 0:
+        return ((nc[k] - nc[k - 1]) * (1 - nc[k])) / ((nc[k + 1] - nc[k]) * (1 - nc[k - 1]))
+    elif nc[k] - nc[k-1] > 0:
+        return np.inf
+    else:
+        return -np.inf
+
+def NCI2(k,nc):
+    return ((nc[k] - nc[k - 1]) / (1 - nc[k - 1])) - ((nc[k + 1] - nc[k]) / (1 - nc[k]))
+
+
+def NCI(nc,kmax):
+    nci1 = []
+    for k in range(1,kmax-1):
+        nci1.append(NCI1(k,nc))
+    
+    nci = [None]
+    if not np.isposinf(np.max(nci1)):
+       for k in range(0,kmax-2):
+           if np.isneginf(nci1[k]):
+               nci.append(np.min([x for x in nci1 if not np.isneginf(x)]))
+           else:
+               nci.append(nci1[k])
+    else:
+        for k in range(0,kmax-2):
+            if np.isneginf(nci1[k]):
+                nci.append(np.min([x for x in nci1 if not np.isneginf(x)]) + NCI2(k,nc))
+            elif np.isposinf(nci1[k]):
+                nci.append(np.max([x for x in nci1 if not np.isposinf(x)]) + NCI2(k,nc))
+            else:
+                nci.append(nci1[k] + NCI2(k+1,nc))
+                
+    nci.append(None)            
+                
+    return np.array(nci) 
+                   
 
 '''
 The code of KMedoids from scikit_learn_extra has been slightly modified to

@@ -1,13 +1,13 @@
 #!/bin/bash
 
 # Define the list of ICVIs (Internal Cluster Validity Indices)
-ICVIS=("mci2" "mci" "cv" "s" "ch" "db" "sse" "vlr" "bic" "xb" "reval") 
+ICVIS=("nci" "tcr" "mci2" "mci" "cv" "s" "ch" "db" "sse" "vlr" "bic" "ts") # "reval" 
 # Iterate over datasets and ICVIs
 for folder in "datasets/control"; do
     for dataset in "$folder"/*; do
         for icvi in "${ICVIS[@]}"; do
             # Submit task to tsp queue
-            tsp python src/control.py \
+            tsp python3 src/control.py \
                 -dataset "$dataset" \
                 -icvi "$icvi" \
                 --seed 31416 \

@@ -1,5 +1,5 @@
-import sys
 import os
+import sys 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import warnings
@@ -24,7 +24,8 @@ from utils import (
     ensure_dirs_exist, KMedoids,
     global_covering_index, coverings_vect, coverings_vect_square, silhouette_score,
     calinski_harabasz_score, davies_bouldin_score, bic_fixed,
-    curvature_method, variance_last_reduction, xie_beni_ts, SSE
+    curvature_method, variance_last_reduction, xie_beni_ts, SSE,
+    TCR, NC, NCI
 )
 from STAC import friedman_test, holm_test
 
@@ -163,6 +164,10 @@ def main_generate_scenario_datasets(path, n_blobs, initial_seed, scenarios_file)
     end = time.time()
     logger.info(f"Dataset generation finished in {end - start:.2f} seconds")
                                              
+
+
+
+
 def run_clustering(args):
     """
     Executes clustering experiments based on the provided arguments.
@@ -242,11 +247,11 @@ def main_clustering(datapath,cluspath,centpath,seed,n_init,kmax,clus_exp_id):
     args.kmeans_pp = lambda X, c, s: kmeans_plusplus(X, n_clusters=c, random_state=s)[0]
     args.ROOT = os.getcwd()
 
-    classifiers = [
+    classifiers = {
         KMeans,
         KMedoids,
         AgglomerativeClustering
-    ]
+    }
 
     
     filenames = sorted(os.listdir(datapath))
@@ -257,7 +262,7 @@ def main_clustering(datapath,cluspath,centpath,seed,n_init,kmax,clus_exp_id):
         args.X = StandardScaler().fit_transform(data[:, :-1])
         args.y = pd.factorize(data[:, -1])[0] + 1
 
-        for clf in classifiers:
+        for clf in classifiers.items():
             args.key = clf
 
             clus_filename = f"./{cluspath}/{file[:-4]}--{args.key.__name__}_"+clus_exp_id+".npy"
@@ -280,7 +285,7 @@ def main_icvis_calculation(datapath,cluspath,centpath,clus_exp_id,indexpath,inde
     logger.info("Starting calculation of ICVIS.")
     start = time.time()
     
-    df_columns = ['s', 'ch', 'db', 'sse', 'bic', 'ts', 'cv', 'vlr','mci', 'mci2']
+    df_columns = ['s', 'ch', 'db', 'sse', 'bic', 'ts', 'cv', 'vlr','tcr','nci','mci', 'mci2']
 
     df_icvis=pd.DataFrame()
     
@@ -301,6 +306,10 @@ def main_icvis_calculation(datapath,cluspath,centpath,clus_exp_id,indexpath,inde
             
             df_index = [f'{file[:-4]}_{k}' for k in range(1,kmax+1)]
             df = pd.DataFrame(columns=df_columns,index=df_index)
+            nc=[]
+            N = X.shape[0]
+            ind = np.triu_indices(N,1)
+            dist = pairwise_distances(X)[ind]
             
             for k in range(kmax):
                 
@@ -309,7 +318,7 @@ def main_icvis_calculation(datapath,cluspath,centpath,clus_exp_id,indexpath,inde
                 centroids=all_centroids[k,:,:]
                 centroids=centroids[~np.isnan(centroids).any(axis=1)]
                 
-                Dmat=distance_matrix(X, centroids)
+                Dmat=pairwise_distances(X, centroids)
                 u=coverings_vect(X,centroids,clusters,distance_normalizer=distance_normalizer,Dmat=Dmat)
                 u2=coverings_vect_square(X,centroids,clusters,distance_normalizer=distance_normalizer,Dmat=Dmat)
                           
@@ -322,10 +331,13 @@ def main_icvis_calculation(datapath,cluspath,centpath,clus_exp_id,indexpath,inde
                 df.loc[index,'vlr'] = variance_last_reduction(clusters, df['sse'][:k].values, sse_, d=d)
                 df.loc[index,'bic'] = bic_fixed(X,clusters, sse_)
                 df.loc[index,'ts'] = xie_beni_ts(clusters, centroids, sse_)
+                df.loc[index,'tcr'] = TCR(clusters, centroids, sse_)
                 df.loc[index,'mci'] = global_covering_index(u,function='mean', mode=0)
                 df.loc[index,'mci2'] = global_covering_index(u2,function='mean', mode=0)
+                nc.append(NC(X,clusters,centroids,dist,ind))
                  
             df['cv'] = curvature_method(df['sse'].values)
+            df['nci'] = NCI(nc,kmax)
     
             if i==0:
                 df_icvis = df
@@ -415,7 +427,7 @@ def main_NCE(indexpath,index_file,resultspath,preds_file,errors_file,deltas,kmax
     select_k_vlr = lambda x: np.amax(np.array(x <= 0.99).nonzero()) + 1
     
     # Define criteria for generating results
-    icvis = ['ch', 'db', 's', 'ts', 'bic', 'cv', 'vlr', 'sse', 'mci', 'mci2']
+    icvis = ['ch', 'db', 's', 'ts', 'bic', 'cv', 'vlr', 'tcr', 'nci', 'sse', 'mci', 'mci2']
     
     # Load data and prepare the DataFrame
     df_icvis = pd.read_csv(indexpath+index_file, index_col=0)
@@ -470,13 +482,13 @@ def main_NCE(indexpath,index_file,resultspath,preds_file,errors_file,deltas,kmax
             for icvi in icvis:
                 icvi_group = group[icvi][:kmax_eff]
                 if "mci" not in icvi:
-                    if icvi in ["db", "ts"]:
+                    if icvi in ["db", "ts", "tcr"]:
                         pred = select_k_min(icvi_group)
                     elif "vlr" in icvi:
                         pred = select_k_vlr(icvi_group)
                     elif "sse" in icvi:
                         pred = alg1(ind=icvi_group, thresholds=deltas['sse'], mode='sse')
-                    else:  # ch, bic, cv, sil
+                    else:  # ch, bic, cv, sil, nci
                         pred = select_k_max(icvi_group)
                 elif "mci2" in icvi:
                     pred = alg1(ind=icvi_group, thresholds=deltas['mci2'], mode='mci')
@@ -500,6 +512,8 @@ def main_NCE(indexpath,index_file,resultspath,preds_file,errors_file,deltas,kmax
     
     end = time.time()
     logger.info(f"NCE finished in {end-start} seconds.")
+
+
 
 def main_NCE_performance(resultspath,outpath,errors_file,ind_exp_id,obs,kmax_conf,outobs):
     
@@ -579,7 +593,8 @@ def main_NCE_performance(resultspath,outpath,errors_file,ind_exp_id,obs,kmax_con
 
     # Friedman (Iman-Davenport correction) and Holm tests
     alpha = 0.05
-    col_test = ['ch', 'db', 's', 'ts', 'bic', 'cv', 'vlr', 'sse', 'mci', 'mci2']
+
+    col_test = ['ch', 'db', 's', 'ts', 'bic', 'cv', 'vlr', 'tcr', 'nci', 'sse', 'mci', 'mci2']
     control = 'mci'
     bylist = ['Scenario']
     drop = [x for x in drop_columns if x not in bylist]
@@ -604,7 +619,7 @@ if __name__ == "__main__":
     
     rng = np.random.default_rng(1)
     
-    datapath="./datasets/test/blobs/"
+    datapath="./test_datasets/"
     # Ensure directories exist
     ensure_dirs_exist([datapath])
     n_blobs = 10
@@ -612,11 +627,12 @@ if __name__ == "__main__":
     scenarios_file = "./scenarios_test.csv"
     main_generate_scenario_datasets(datapath, n_blobs, initial_seed, scenarios_file)
     
-    cluspath = './datasets/test/clusters/'
-    centpath = './datasets/test/centroids/'
+    cluspath = './test_clusters/clusters/'
+    centpath = './test_clusters/centroids/'
     ensure_dirs_exist([cluspath,centpath])
     seed = 31416
     n_init = 10
+    
     kmax_clus = 50
     clus_exp_id = f'{kmax_clus}_{n_init}_{seed}'
     main_clustering(datapath,cluspath,centpath,seed,n_init,kmax_clus,clus_exp_id)
@@ -628,7 +644,7 @@ if __name__ == "__main__":
     index_file = 'indexes_'+ind_exp_id+'.csv'
     main_icvis_calculation(datapath,cluspath,centpath,clus_exp_id,indexpath,index_file,kmax_ind)
     
-    resultspath = "./results/test"
+    resultspath = "./test_results/"
     ensure_dirs_exist([resultspath])
     # Thresholds for different cohesion measures
     deltas = {
@@ -642,7 +658,7 @@ if __name__ == "__main__":
     errors_file = 'errors_'+ind_exp_id+obs+'.csv'
     main_NCE(indexpath,index_file,resultspath,preds_file,errors_file,deltas,kmax_conf)
     
-    outpath = "./out_files/test"
+    outpath = "./test_out_files/"
     ensure_dirs_exist([outpath])
     outobs = ''
     main_NCE_performance(resultspath,outpath,errors_file,ind_exp_id,obs,kmax_conf,outobs)

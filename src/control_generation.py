@@ -19,6 +19,130 @@ from sklearn.cluster import KMeans
 # Suppress warnings
 warnings.filterwarnings("ignore")
 
+# save as fetch_clustbench.py or paste into your script
+import os
+import io
+import json
+import requests
+import numpy as np
+
+# prefer liac-arff, fallback to scipy
+try:
+    import liac_arff as arff
+    _HAS_LIAC = True
+except Exception:
+    _HAS_LIAC = False
+    try:
+        from scipy.io import arff
+    except Exception:
+        arff = None
+
+GITHUB_API_ARTIFACTS = "https://api.github.com/repos/deric/clustering-benchmark/contents/src/main/resources/datasets/artificial"
+RAW_BASE = "https://raw.githubusercontent.com/deric/clustering-benchmark/master/src/main/resources/datasets/artificial"
+
+def list_remote_arff_files():
+    """List .arff files in the artificial datasets folder (via GitHub API)."""
+    resp = requests.get(GITHUB_API_ARTIFACTS, timeout=30)
+    resp.raise_for_status()
+    items = resp.json()
+    arff_files = [it["name"] for it in items if it["name"].lower().endswith(".arff")]
+    return arff_files
+
+def download_arff_raw(name):
+    """Download raw ARFF text for given file name (filename.arff)."""
+    url = f"{RAW_BASE}/{name}"
+    r = requests.get(url, timeout=30)
+    r.raise_for_status()
+    return r.text
+
+def parse_arff_text(text):
+    """Parse ARFF text into a tuple (data_records, attribute_names, attribute_types)."""
+    if _HAS_LIAC:
+        obj = arff.loads(text)
+        attributes = [a[0] for a in obj["attributes"]]
+        data = obj["data"]
+        return data, attributes
+    else:
+        # fallback to scipy (which returns a numpy recarray and meta)
+        if arff is None:
+            raise RuntimeError("No ARFF parser available. Install 'liac-arff' or 'scipy'.")
+        fileobj = io.StringIO(text)
+        data, meta = arff.loadarff(fileobj)
+        attributes = [attr[0] for attr in meta._attributes]
+        # convert recarray rows to tuples
+        rows = [tuple(row) for row in data]
+        return rows, attributes
+
+def to_numpy_X_y(rows, attributes):
+    """Convert parsed ARFF data (rows list of tuples) to X (float array) and y (labels)."""
+    # rows may contain bytes for nominal strings when using scipy; handle that
+    arr = []
+    for r in rows:
+        row = []
+        for v in r:
+            if isinstance(v, bytes):
+                v = v.decode('utf-8')
+            row.append(v)
+        arr.append(row)
+    arr = np.array(arr, dtype=object)  # keep object first
+    # assume last column is class/label
+    X_obj = arr[:, :-1]
+    y_obj = arr[:, -1]
+    # try to convert X to float (where possible)
+    def convert_column(col):
+        try:
+            return col.astype(float)
+        except Exception:
+            # try mapping nominal values to integer codes
+            uniques, inv = np.unique(col, return_inverse=True)
+            return inv.astype(float)
+    X_cols = []
+    for j in range(X_obj.shape[1]):
+        X_cols.append(convert_column(X_obj[:, j]))
+    X = np.column_stack(X_cols).astype(float)
+    # For labels, keep as integers if possible; map strings to ints otherwise
+    try:
+        y = y_obj.astype(float)
+    except Exception:
+        uniques, inv = np.unique(y_obj, return_inverse=True)
+        y = inv.astype(int)
+    # ensure y is column vector for saving like you used elsewhere
+    y = y.reshape(-1, 1)
+    return X, y
+
+def save_dataset_npy(path, filename, X, y):
+    os.makedirs(path, exist_ok=True)
+    file_path = os.path.join(path, f"{filename}.npy")
+    np.save(file_path, np.concatenate((X, y), axis=1))
+    print(f"Saved {file_path} — X.shape={X.shape}, y.shape={y.shape}")
+
+def download_and_convert(names=None, dest_dir="./datasets/control"):
+    """
+    If `names` is None, list remote .arff files and download all.
+    Otherwise `names` is a list of filenames (e.g. ['zelnik2.arff'] or ['zelnik2.arff','cluto-t8.8k.arff']).
+    """
+    remote_files = list_remote_arff_files()
+    if names is None:
+        target_files = remote_files
+    else:
+        # accept names with or without .arff
+        target_files = []
+        for n in names:
+            if not n.lower().endswith(".arff"):
+                n = n + ".arff"
+            if n in remote_files:
+                target_files.append(n)
+            else:
+                print(f"Warning: {n} not found in remote repo; skipping.")
+    print(f"Will download {len(target_files)} files.")
+    for fname in target_files:
+        print("Downloading", fname)
+        text = download_arff_raw(fname)
+        rows, attributes = parse_arff_text(text)
+        X, y = to_numpy_X_y(rows, attributes)
+        save_dataset_npy(dest_dir, os.path.splitext(fname)[0], X, y)
+
+
 class NumpyEncoder(json.JSONEncoder):
     """
     Custom JSON encoder for handling NumPy arrays.
@@ -164,7 +288,17 @@ def generate_control_data(
     # Generate real-world datasets
     generate_real_datasets(path + "control/")
  
-    
+    # You can pass explicit names you want (examples below). The script will warn about missing ones.
+    requested = [
+        "zelnik2.arff", "zelnik4.arff", "cluto-t8.8k.arff", "cure-t2-4k.arff",
+        "2d-10c.arff", "2d-4c-n04.arff", "sizes1.arff", "sizes2.arff", "sizes3.arff", "sizes4.arff", "sizes5.arff",
+        "cure-t0-200n-2d.arff", "2d-2c-n20.arff", "dpb.arff", "dpc.arff", "2d-10c.arff", "2d-20c-no0.arff", "2d-3c-no123.arff",  "2d-4c-no4.arff", "2d-4c-no9.arff", "2d-4c.arff"
+    ]
+    # If you want everything, call download_and_convert(None)
+    download_and_convert(requested, dest_dir="./datasets/control")
+ 
+
+     
 if __name__ == "__main__":
     rng = np.random.default_rng(1)
     initial_seed=200
@@ -188,4 +322,4 @@ if __name__ == "__main__":
     ])
     
     generate_control_data(path="./datasets/")
-     
+ 
