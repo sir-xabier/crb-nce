@@ -3,7 +3,7 @@ import json
 import pandas as pd
 
 # Define the folder containing results
-results_folder = "./results_control"
+results_folder = "./results/control"
 
 # Initialize lists to store extracted data
 data = []
@@ -15,10 +15,10 @@ for filename in os.listdir(results_folder):
         
         # Extract dataset, icvi, and method from filename
         parts = filename.split("-")
-        dataset = parts[0]
-        icvi = parts[1]
-        method = parts[2]  # Extract method before "_"
-        kmax= parts[3]
+        dataset = parts[0:-4]
+        icvi = parts[-4]
+        method = parts[-3]  # Extract method before "_"
+        kmax= parts[-2]
         # Read the JSON content inside the file
         with open(file_path, "r") as file:
             content = json.load(file)

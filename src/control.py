@@ -155,7 +155,7 @@ def run_clustering(args):
                     args.time += time.time() - start_load + model_fit_time  # add load + original fit time
                     logger.info(f"Loaded cached clustering for k={k}, included original fit time")
                 except Exception as e:
-                    
+
                     logger.warning(f"Failed loading cache {cache_path}: {e}. Will recompute.")
 
             # Compute clustering if not cached
