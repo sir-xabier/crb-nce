@@ -145,14 +145,13 @@ def run_clustering(args):
 
             # Load cache if exists
             if os.path.exists(cache_path):
-                start_load = time.time()
                 try:
                     cached = load(cache_path)
                     y_best_solution = cached.get("labels", None)
                     centroids = cached.get("centroids", None)
                     best_solution_error = cached.get("inertia", np.inf)
                     model_fit_time = cached.get("fit_time", 0.0)
-                    args.time += time.time() - start_load + model_fit_time  # add load + original fit time
+                    args.time +=  model_fit_time   
                     logger.info(f"Loaded cached clustering for k={k}, included original fit time")
                 except Exception as e:
 
@@ -307,7 +306,7 @@ def run_clustering(args):
 
 def run_experiment(args):
     dataset_name = os.path.basename(args.dataset).replace(".npy", "")
-    exp_name = f"./results/control/{dataset_name}-{args.icvi}-{args.key.__name__}-{args.kmax}-{args.seed}.txt"
+    exp_name = f"./results/control_additional/{dataset_name}-{args.icvi}-{args.key.__name__}-{args.kmax}-{args.seed}.txt"
     
     if os.path.exists(exp_name):
         logger.info(f"Experiment {exp_name} already exists. Skipping.")
@@ -331,7 +330,7 @@ def main():
     parser.add_argument("-icvi", type=str, default="nci", help="The name of the ICVI")
     parser.add_argument("--seed", type=int, default=31416, help="Random seed")
     parser.add_argument("--n_init", type=int, default=10, help="Number of initialization runs")
-    parser.add_argument("--kmax", type=int, default=35, help="Maximum number of clusters")
+    parser.add_argument("--kmax", type=int, default=50, help="Maximum number of clusters")
     parser.add_argument("--maxiter", type=int, default=300, help="Maximum iterations for clustering algorithms")
     args = parser.parse_args()
     

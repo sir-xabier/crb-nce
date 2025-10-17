@@ -1,31 +1,16 @@
 import os
+import io
 import json
 import warnings
 from typing import Generator, List, Tuple, Union
-
-import numpy as np
-import pandas as pd
-from scipy.spatial import distance
-from sklearn import datasets
-
-from utils import (
-    global_covering_index, coverings_vect, coverings_vect_square, SSE, ensure_dirs_exist
-)
-
-from sklearn.preprocessing import StandardScaler
-from sklearn.cluster import KMeans
+from collections import Counter
+from sklearn.preprocessing import LabelEncoder
 
 
 # Suppress warnings
 warnings.filterwarnings("ignore")
 
-# save as fetch_clustbench.py or paste into your script
-import os
-import io
-import json
 import requests
-import numpy as np
-
 # prefer liac-arff, fallback to scipy
 try:
     import liac_arff as arff
@@ -37,6 +22,21 @@ except Exception:
     except Exception:
         arff = None
 
+import numpy as np
+import pandas as pd
+import shutil
+from scipy.spatial import distance
+from sklearn import datasets
+from pathlib import Path
+
+from utils import (
+    global_covering_index, coverings_vect, coverings_vect_square, SSE, ensure_dirs_exist
+)
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans
+from sklearn.datasets import fetch_olivetti_faces
+
+  
 GITHUB_API_ARTIFACTS = "https://api.github.com/repos/deric/clustering-benchmark/contents/src/main/resources/datasets/artificial"
 RAW_BASE = "https://raw.githubusercontent.com/deric/clustering-benchmark/master/src/main/resources/datasets/artificial"
 
@@ -49,23 +49,18 @@ def list_remote_arff_files():
     return arff_files
 
 def download_arff_raw(name):
-    """Download raw ARFF text for given file name (filename.arff)."""
     url = f"{RAW_BASE}/{name}"
     r = requests.get(url, timeout=30)
     r.raise_for_status()
     return r.text
 
 def parse_arff_text(text):
-    """Parse ARFF text into a tuple (data_records, attribute_names, attribute_types)."""
     if _HAS_LIAC:
         obj = arff.loads(text)
         attributes = [a[0] for a in obj["attributes"]]
         data = obj["data"]
         return data, attributes
     else:
-        # fallback to scipy (which returns a numpy recarray and meta)
-        if arff is None:
-            raise RuntimeError("No ARFF parser available. Install 'liac-arff' or 'scipy'.")
         fileobj = io.StringIO(text)
         data, meta = arff.loadarff(fileobj)
         attributes = [attr[0] for attr in meta._attributes]
@@ -88,17 +83,10 @@ def to_numpy_X_y(rows, attributes):
     # assume last column is class/label
     X_obj = arr[:, :-1]
     y_obj = arr[:, -1]
-    # try to convert X to float (where possible)
-    def convert_column(col):
-        try:
-            return col.astype(float)
-        except Exception:
-            # try mapping nominal values to integer codes
-            uniques, inv = np.unique(col, return_inverse=True)
-            return inv.astype(float)
+ 
     X_cols = []
     for j in range(X_obj.shape[1]):
-        X_cols.append(convert_column(X_obj[:, j]))
+        X_cols.append(X_obj[:, j].astype(float))
     X = np.column_stack(X_cols).astype(float)
     # For labels, keep as integers if possible; map strings to ints otherwise
     try:
@@ -113,13 +101,16 @@ def to_numpy_X_y(rows, attributes):
 def save_dataset_npy(path, filename, X, y):
     os.makedirs(path, exist_ok=True)
     file_path = os.path.join(path, f"{filename}.npy")
-    np.save(file_path, np.concatenate((X, y), axis=1))
+    np.save(file_path, np.concatenate((X, y.reshape(-1, 1) ), axis=1))
     print(f"Saved {file_path} — X.shape={X.shape}, y.shape={y.shape}")
 
-def download_and_convert(names=None, dest_dir="./datasets/control"):
+def download_and_convert(names=None, dest_dir="./datasets/control", save_csv=True):
     """
     If `names` is None, list remote .arff files and download all.
-    Otherwise `names` is a list of filenames (e.g. ['zelnik2.arff'] or ['zelnik2.arff','cluto-t8.8k.arff']).
+    Otherwise `names` is a list of filenames (e.g. ['zelnik2.arff'] or ['cluto-t8.8k.arff']).
+
+    Additionally, returns a pandas DataFrame with columns:
+        [name, n_samples, samples_per_cluster, k, dim]
     """
     remote_files = list_remote_arff_files()
     if names is None:
@@ -134,7 +125,12 @@ def download_and_convert(names=None, dest_dir="./datasets/control"):
                 target_files.append(n)
             else:
                 print(f"Warning: {n} not found in remote repo; skipping.")
+
     print(f"Will download {len(target_files)} files.")
+
+    Path(dest_dir).mkdir(parents=True, exist_ok=True)
+    summary = []  # to accumulate info for the DataFrame
+
     for fname in target_files:
         print("Downloading", fname)
         text = download_arff_raw(fname)
@@ -142,6 +138,32 @@ def download_and_convert(names=None, dest_dir="./datasets/control"):
         X, y = to_numpy_X_y(rows, attributes)
         save_dataset_npy(dest_dir, os.path.splitext(fname)[0], X, y)
 
+        # --- NEW: gather dataset info ---
+        name = os.path.splitext(fname)[0]
+        n_samples = X.shape[0]
+        dim = X.shape[1] if X.ndim > 1 else 1
+        y = np.asarray(y).ravel()
+        counts = Counter(y.tolist())
+        k = len(counts)
+        samples_per_cluster = {str(lbl): int(cnt) for lbl, cnt in counts.items()}
+
+        summary.append({
+            "name": name,
+            "n_samples": n_samples,
+            "samples_per_cluster": json.dumps(samples_per_cluster),
+            "k": k,
+            "dim": dim,
+        })
+        # --------------------------------
+
+    df = pd.DataFrame(summary, columns=["name", "n_samples", "samples_per_cluster", "k", "dim"])
+
+    if save_csv and not df.empty:
+        csv_path = os.path.join("./datasets/", "summary.csv")
+        df.to_csv(csv_path, index=False)
+        print(f"Saved dataset summary to: {csv_path}")
+
+    return df
 
 class NumpyEncoder(json.JSONEncoder):
     """
@@ -194,6 +216,10 @@ def generate_synthetic_datasets(path, n_samples, random_state):
     )
     save_dataset(path, "varied", X, y.reshape(-1, 1))
 
+    X, y = fetch_olivetti_faces(return_X_y=True)
+    # X is (n_samples, 4096) already (64x64 flattened). y is integer labels.
+    save_dataset(path, "olivetti_faces", X, y.reshape(-1,1))
+    
 def read_keel_dat(file_path):
     """
     Reads a KEEL .dat file and returns a Pandas DataFrame.
@@ -261,10 +287,16 @@ def generate_real_datasets(path):
 
     for name, loader in sklearn_datasets_to_load.items():
         X, y = loader(return_X_y=True)
+                # --- Label encode y ---
+        le = LabelEncoder()
+        y = le.fit_transform(y)
+        
         save_dataset(path, name, X, y.reshape(-1, 1))
     
     for name, file_path in keel_datasets_to_load.items():
         X, y = read_keel_dat(file_path)
+        le = LabelEncoder()
+        y = le.fit_transform(y)
         save_dataset(path, name, X, y.reshape(-1, 1))
     
 
@@ -290,13 +322,12 @@ def generate_control_data(
  
     # You can pass explicit names you want (examples below). The script will warn about missing ones.
     requested = [
-        "zelnik2.arff", "zelnik4.arff", "cluto-t8.8k.arff", "cure-t2-4k.arff",
-        "2d-10c.arff", "2d-4c-n04.arff", "sizes1.arff", "sizes2.arff", "sizes3.arff", "sizes4.arff", "sizes5.arff",
-        "cure-t0-200n-2d.arff", "2d-2c-n20.arff", "dpb.arff", "dpc.arff", "2d-10c.arff", "2d-20c-no0.arff", "2d-3c-no123.arff",  "2d-4c-no4.arff", "2d-4c-no9.arff", "2d-4c.arff"
+        "cure-t0-2000n-2D.arff", "cluto-t8-8k.arff", "zelnik2.arff", "zelnik4.arff", "cure-t2-4k.arff",
+        "2d-10c.arff", "2d-4c-no4.arff", "sizes1.arff", "sizes2.arff", "sizes3.arff", "sizes4.arff", "sizes5.arff",
+        "dpb.arff", "dpc.arff", "2d-10c.arff", "2d-20c-no0.arff", "2d-3c-no123.arff",  "2d-4c-no4.arff", "2d-4c-no9.arff", "2d-4c.arff", "aml28.arff"
     ]
     # If you want everything, call download_and_convert(None)
     download_and_convert(requested, dest_dir="./datasets/control")
- 
 
      
 if __name__ == "__main__":
