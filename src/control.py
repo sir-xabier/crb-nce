@@ -83,6 +83,11 @@ def run_clustering(args):
         true_k = 1
         y = np.zeros(n)
 
+    elif args.dataset in ["cluto-t8.8k", "zelnik2", "zelnik4"]:
+        true_k -= 1
+    elif args.dataset in ["cure-t2-4k"]:
+        true_k -= 2
+
     if args.kmax == 1:
         if true_k <= 5:
             args.kmax = 15
@@ -306,7 +311,7 @@ def run_clustering(args):
 
 def run_experiment(args):
     dataset_name = os.path.basename(args.dataset).replace(".npy", "")
-    exp_name = f"./results/control_additional/{dataset_name}-{args.icvi}-{args.key.__name__}-{args.kmax}-{args.seed}.txt"
+    exp_name = f"./results/control/{dataset_name}-{args.icvi}-{args.key.__name__}-{args.kmax}-{args.seed}.txt"
     
     if os.path.exists(exp_name):
         logger.info(f"Experiment {exp_name} already exists. Skipping.")

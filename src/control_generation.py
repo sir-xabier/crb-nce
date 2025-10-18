@@ -136,6 +136,10 @@ def download_and_convert(names=None, dest_dir="./datasets/control", save_csv=Tru
         text = download_arff_raw(fname)
         rows, attributes = parse_arff_text(text)
         X, y = to_numpy_X_y(rows, attributes)
+                        # --- Label encode y ---
+        le = LabelEncoder()
+        y = le.fit_transform(y)
+        
         save_dataset_npy(dest_dir, os.path.splitext(fname)[0], X, y)
 
         # --- NEW: gather dataset info ---
@@ -323,8 +327,8 @@ def generate_control_data(
     # You can pass explicit names you want (examples below). The script will warn about missing ones.
     requested = [
         "cure-t0-2000n-2D.arff", "cluto-t8-8k.arff", "zelnik2.arff", "zelnik4.arff", "cure-t2-4k.arff",
-        "2d-10c.arff", "2d-4c-no4.arff", "sizes1.arff", "sizes2.arff", "sizes3.arff", "sizes4.arff", "sizes5.arff",
-        "dpb.arff", "dpc.arff", "2d-10c.arff", "2d-20c-no0.arff", "2d-3c-no123.arff",  "2d-4c-no4.arff", "2d-4c-no9.arff", "2d-4c.arff", "aml28.arff"
+        "2d-10c.arff", "sizes1.arff", "sizes2.arff", "sizes3.arff", "sizes4.arff", "sizes5.arff",
+        "dpb.arff", "dpc.arff", "2d-20c-no0.arff", "2d-3c-no123.arff",  "2d-4c-no4.arff", "2d-4c-no9.arff", "2d-4c.arff", "aml28.arff"
     ]
     # If you want everything, call download_and_convert(None)
     download_and_convert(requested, dest_dir="./datasets/control")

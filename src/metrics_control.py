@@ -3,7 +3,7 @@ import json
 import pandas as pd
 
 # Define the folder containing results
-results_folder = "./results/control_additional"
+results_folder = "./results/control"
 
 # Initialize lists to store extracted data
 data = []
@@ -50,8 +50,8 @@ time_table = df.groupby(["ICVI"]).agg(
 ).reset_index()
 
 # Save results
-accuracy_table.to_csv("./out_files/accuracy_results_control_additional.csv", index=False)
-time_table.to_csv("./out_files/time_results_control_additional.csv", index=False)
+accuracy_table.to_csv("./out_files/accuracy_results_control.csv", index=False)
+time_table.to_csv("./out_files/time_results_control.csv", index=False)
 
 # Display tables
 print("Accuracy Table:\n", accuracy_table)
